@@ -1,0 +1,10 @@
+*.pyc
+redis-astra.egg-info
+build/
+dist/
+dump.rdb
+vagrant/.vagrant
+.idea
+.eggs/
+.cache/
+*.egg-info/
