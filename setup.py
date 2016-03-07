@@ -4,7 +4,6 @@ from os import path
 import sys
 from astra import __version__
 
-from setuptools import setup
 from setuptools.command.test import test as TestCommand
 
 here = path.abspath(path.dirname(__file__))
@@ -33,13 +32,14 @@ setup(
     description='ORM for Redis',
     long_description=long_description,
     url='https://github.com/pilat/redis-astra',
+    download_url='https://github.com/pilat/redis-astra/tarball/{0}'
+        .format(__version__),
     author='Vladimir K Urushev',
     author_email='urushev@yandex.ru',
     maintainer='Vladimir K Urushev',
     maintainer_email='urushev@yandex.ru',
     keywords=['Redis', 'ORM'],
     license='MIT',
-    # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
@@ -47,13 +47,13 @@ setup(
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
-    ],
+        ],
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     install_requires=['redis>=2.9.1'],
     extras_require={
         'dev': ['check-manifest'],
-        'test': ['coverage', 'mock'],  # pytest-cov
-    },
+        'test': ['coverage', 'mock'],
+        },
     tests_require=['pytest>=2.5.0'],
     cmdclass={'test': PyTest},
 )
