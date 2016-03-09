@@ -38,6 +38,9 @@ class CommonHelper:
     def assert_commands_count(self, count):
         assert len(commands) == count, commands
 
+    def assert_keys_count(self, count):
+        assert len(db.keys()) == count
+
 
 # Test of base fields behavior
 class TestModelField(CommonHelper):
@@ -48,6 +51,12 @@ class TestModelField(CommonHelper):
         user1.name = 12345
         assert user1.name == 12345
         self.assert_commands_count(3)
+
+    def test_remove_element(self):
+        user1 = UserObject(1)
+        user1.name = 'Username'
+        user1.remove()
+        self.assert_keys_count(0)
 
     def test_set_attrs_via_kwargs(self):
         user1 = UserObject(1, name='Username')
@@ -394,6 +403,29 @@ class TestList(CommonHelper):
         assert site1.pk == site1_user1_pop.pk
         assert site2.pk == site1_user2_pop.pk
 
+    def test_get_by_slice(self):
+        site1 = SiteObject('id2')
+        site2 = SiteObject('id1')
+        site3 = SiteObject('id0')
+
+        user1 = UserObject(1)
+        user1.sites_list.lpush(site1, site2)
+        user1.sites_list.rpush(site3)
+
+        user1_read = UserObject(1)
+        slice1 = user1_read.sites_list[1:2]
+        assert len(slice1) == 2
+        assert slice1[0] == site1
+
+    def test_erase_list(self):
+        user1 = UserObject(1, name='User123')
+        site1 = SiteObject('id1')
+        user1.sites_list.lpush(site1)
+        assert len(user1.sites_list) == 1
+        # user1.sites_list = None
+        user1.remove()
+        self.assert_keys_count(0)
+
 
 class TestSet(CommonHelper):
     def test_len(self):
@@ -434,6 +466,15 @@ class TestSet(CommonHelper):
         # Remember that the order in sets is not respected:
         assert read_site == site2 or read_site == site1
 
+    def test_erase_set(self):
+        user1 = UserObject(1, name='User123')
+        site1 = SiteObject('id1')
+        user1.sites_set.sadd(site1)
+        assert len(user1.sites_set) == 1
+        user1.sites_set = None
+        user1.remove()
+        self.assert_keys_count(0)
+
 
 class TestSortedSet(CommonHelper):
     def test_add_and_zrange(self):
@@ -461,6 +502,18 @@ class TestSortedSet(CommonHelper):
         assert len(answered_list) == 1
         assert answered_list[0] == site2
 
+    def test_get_by_slice(self):
+        site1 = SiteObject(1)
+        site2 = SiteObject(2)
+        site3 = SiteObject(3)
+        user1 = UserObject(1)
+        user1.sites_sorted_set.zadd(100, site1, 200, site2, 300, site3)
+
+        user1_read = UserObject(1)
+        result_slice = user1_read.sites_sorted_set[200:300]
+        assert result_slice[0] == site2
+        assert result_slice[1] == site3
+
     def test_rem_by_score(self):
         site1 = SiteObject(1)
         site2 = SiteObject(2)
@@ -477,3 +530,12 @@ class TestSortedSet(CommonHelper):
                                                                      '-inf')
         assert len(answered_list) == 1
         assert answered_list[0] == site3
+
+    def test_erase_sorted_set(self):
+        user1 = UserObject(1, name='User123')
+        site1 = SiteObject('id1')
+        user1.sites_sorted_set.zadd(1, site1)
+        assert len(user1.sites_sorted_set) == 1
+        user1.sites_sorted_set = None
+        user1.remove()
+        self.assert_keys_count(0)

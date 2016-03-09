@@ -43,7 +43,7 @@ class Model:
             return super().__setattr__(key, value)
 
     def __getattribute__(self, key):
-        if key.startswith('_'):
+        if key == '_fields':
             return object.__getattribute__(self, key)
 
         if key in self._fields:
@@ -76,6 +76,10 @@ class Model:
     def __repr__(self):
         return '<Model %s(pk=%s)>' % (self.__class__.__name__, self.pk)
 
+    def remove(self):
+        for field in self._fields.values():
+            field._remove()
+
 
 # All model fields inherited from this
 class ModelField:
@@ -90,7 +94,7 @@ class ModelField:
             self._model = kwargs['model']
         self._options = kwargs
 
-    def _get_key_name(self, field_type, field=None):
+    def _get_key_name(self, field=None):
         """
         Метод для получения ключа поля/хэша или сета. Формируется как
         prefix::object_name::field_type::id::field_name, например:
@@ -98,7 +102,7 @@ class ModelField:
             prefix::author::hash::54
         """
         parent_class_name = self._model.__class__.__name__.lower()
-        items = [self._model.prefix, parent_class_name, field_type,
+        items = [self._model.prefix, parent_class_name, self._field_type_name,
                  str(self._model.pk)]
         if field:
             items.append(field)
@@ -115,7 +119,7 @@ class ModelField:
             raise AttributeError('Invalid attribute with name "%s"'
                                  % (method_name,))
         original_command = getattr(self._model.database, method_name)
-        current_key = self._get_key_name(self._field_type_name, self._name)
+        current_key = self._get_key_name(self._name)
 
         def _method_wrapper(*args, **kwargs):
             new_args = [current_key]
@@ -125,6 +129,9 @@ class ModelField:
 
         self._value = None  # Reset cached value
         return _method_wrapper
+
+    def _remove(self):
+        self._model.database.delete(self._get_key_name())
 
 
 # Validation rules common between hash and fields
@@ -261,7 +268,7 @@ class ForeignObjectValidatorMixin:
 
 # Fields:
 class BaseField(ModelField):
-    _field_type_name = '--'
+    _field_type_name = 'fld'
 
     def __init__(self, **kwargs):
         self._value = None
@@ -272,13 +279,12 @@ class BaseField(ModelField):
             raise ValueError("You're cannot save None value for %s"
                              % (self._name,))
         self._value = self._validate(value)
-        self._model.database.set(self._get_key_name(self._field_type_name,
-                                                    self._name), self._value)
+        self._model.database.set(self._get_key_name(self._name), self._value)
 
     def _obtain(self):
         if self._value is None:
             self._value = self._convert(self._model.database.get(
-                self._get_key_name(self._field_type_name, self._name)))
+                self._get_key_name(self._name)))
         return self._value
 
     def _validate(self, value):
@@ -313,8 +319,7 @@ class ForeignKey(ForeignObjectValidatorMixin, BaseField):
         if isinstance(value, Model):
             super()._assign(value.pk)
         elif value is None:
-            self._model.database.delete(
-                self._get_key_name(self._field_type_name), self._name)
+            self._model.database.delete(self._get_key_name(self._name))
             self._value = None
         else:
             super()._assign(value)
@@ -339,6 +344,8 @@ class DateTimeField(DateTimeValidatorMixin, BaseField):
 
 # Hashes
 class BaseHash(ModelField):
+    _field_type_name = 'hash'
+
     def __init__(self, **kwargs):
         self._updated = False
         super().__init__(**kwargs)
@@ -348,8 +355,8 @@ class BaseHash(ModelField):
             raise ValueError("You're cannot save None value for %s"
                              % (self._name,))
         saved_value = self._validate(value)
-        self._model.database.hset(self._get_key_name('hash'), self._name,
-                                  saved_value)
+        self._model.database.hset(self._get_key_name(),
+                                  self._name, saved_value)
         if self._model._hash_loaded:
             self._model._hash[self._name] = saved_value
 
@@ -362,7 +369,8 @@ class BaseHash(ModelField):
             return
         self._model._hash_loaded = True
         self._model._hash = \
-            self._model.database.hgetall(self._get_key_name('hash'))
+            self._model.database.hgetall(
+                self._get_key_name())
         if not self._model._hash:  # None if hash field is not exist
             self._model._hash = {}
 
@@ -407,7 +415,7 @@ class ForeignKeyHash(ForeignObjectValidatorMixin, BaseHash):
         if isinstance(value, Model):
             super()._assign(value.pk)
         elif value is None:
-            self._model.database.hdel(self._get_key_name('hash'), self._name)
+            self._model.database.hdel(self._get_key_name(), self._name)
             if self._model._hash_loaded:
                 del self._model._hash[self._name]
         else:
@@ -435,15 +443,18 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
         return self  # for delegate to __getattr__ on this class
 
     def _assign(self, value):
-        raise ValueError("Collections fields is not possible assign directly")
+        if value is None:
+            self._remove()
+        else:
+            raise ValueError("Collections fields is not possible "
+                             "assign directly")
 
     def __getattr__(self, item):
         if item not in self._allowed_redis_methods:
             return super().__getattribute__(item)
 
         original_command = getattr(self._model.database, item)
-        current_key = self._get_key_name(self._field_type_name,
-                                         self._model.pk)
+        current_key = self._get_key_name(self._name)
 
         def _method_wrapper(*args, **kwargs):
             # Scan passed args and convert to models is possible
@@ -469,14 +480,30 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
 
         return _method_wrapper
 
+    def _remove(self):
+        self._model.database.delete(self._get_key_name(self._name))
+
 
 class List(BaseCollection):
+    """
+    :type lpush: attribute
+    """
     _field_type_name = 'list'
     _allowed_redis_methods = ('lindex', 'linsert', 'llen', 'lpop', 'lpush',
                               'lpushx', 'lrange', 'lrem', 'lset', 'ltrim',
                               'rpop', 'rpoplpush', 'rpush', 'rpushx',)
     _single_object_answered_redis_methods = ('lindex', 'lpop', 'rpop',)
     _list_answered_redis_methods = ('lrange',)
+
+    def __len__(self):
+        return self.llen()
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return self.lrange(item.start, item.stop)
+        else:
+            ret = self.lrange(item, item)
+            return ret[0] if len(ret) == 1 else None
 
 
 class Set(BaseCollection):
@@ -488,6 +515,9 @@ class Set(BaseCollection):
     _single_object_answered_redis_methods = ('spop',)
     _list_answered_redis_methods = ('sdiff', 'sinter', 'smembers',
                                     'srandmember', 'sscan', 'sunion',)
+
+    def __len__(self):
+        return self.scard()
 
 
 class SortedSet(BaseCollection):
@@ -503,3 +533,14 @@ class SortedSet(BaseCollection):
     _list_answered_redis_methods = ('zrange', 'zrangebylex', 'zrangebyscore',
                                     'zrevrange', 'zrevrangebylex',
                                     'zrevrangebyscore', 'zscan', )
+
+    def __len__(self):
+        return self.zcard()
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return self.zrangebyscore(item.start or '-inf',
+                                      item.stop or '+inf')
+        else:
+            ret = self.zrangebyscore(item, item)
+            return ret[0] if len(ret) == 1 else None
