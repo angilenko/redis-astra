@@ -194,6 +194,8 @@ class DateValidatorMixin:
         return value.strftime("%s")  # both class implements it
 
     def _convert(self, value):
+        if not value:
+            return value
         try:
             value = int(value)
         except ValueError:
@@ -204,6 +206,8 @@ class DateValidatorMixin:
 
 class DateTimeValidatorMixin(DateValidatorMixin):
     def _convert(self, value):
+        if not value:
+            return value
         try:
             value = int(value)
         except ValueError:
