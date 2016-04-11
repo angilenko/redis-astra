@@ -13,8 +13,6 @@ class Model:
     """
 
     prefix = 'astra'
-    pk = None
-    _fields = dict()
 
     def __init__(self, pk=None, **kwargs):
         self._fields = dict()
@@ -51,6 +49,7 @@ class Model:
             return field._obtain()
 
         # If key is not in the fields, we're attempt call helper
+        # Ex. "user.login_strlen" call redis "strlen" method on "login" field
         key_elements = key.split('_', )
         method_name = key_elements.pop()
         field_name = '_'.join(key_elements)
@@ -77,8 +76,15 @@ class Model:
         return '<Model %s(pk=%s)>' % (self.__class__.__name__, self.pk)
 
     def remove(self):
+        # Remove all fields and one time delete entire hash
+        is_hash_deleted = False
         for field in self._fields.values():
-            field._remove()
+            if isinstance(field, BaseHash):
+                if not is_hash_deleted:
+                    is_hash_deleted = True
+                    self.database.delete(field._get_key_name(True))
+            else:
+                field._remove()
 
 
 # All model fields inherited from this
@@ -94,18 +100,20 @@ class ModelField:
             self._model = kwargs['model']
         self._options = kwargs
 
-    def _get_key_name(self, field=None):
+    def _get_key_name(self, is_hash=False):
         """
-        Метод для получения ключа поля/хэша или сета. Формируется как
-        prefix::object_name::field_type::id::field_name, например:
-            prefix::user::table::12::login
-            prefix::author::hash::54
+        Create redis key. Schema:
+        prefix::object_name::field_type::id::field_name, e.g.
+            prefix::user::fld::12::login
+            prefix::user::list::12::sites
+            prefix::user::zset::12::winners
+            prefix::user::hash::54
         """
         parent_class_name = self._model.__class__.__name__.lower()
         items = [self._model.prefix, parent_class_name, self._field_type_name,
                  str(self._model.pk)]
-        if field:
-            items.append(field)
+        if not is_hash:
+            items.append(self._name)
         return '::'.join(items)
 
     def _assign(self, value):
@@ -119,7 +127,7 @@ class ModelField:
             raise AttributeError('Invalid attribute with name "%s"'
                                  % (method_name,))
         original_command = getattr(self._model.database, method_name)
-        current_key = self._get_key_name(self._name)
+        current_key = self._get_key_name()
 
         def _method_wrapper(*args, **kwargs):
             new_args = [current_key]
@@ -283,12 +291,12 @@ class BaseField(ModelField):
             raise ValueError("You're cannot save None value for %s"
                              % (self._name,))
         self._value = self._validate(value)
-        self._model.database.set(self._get_key_name(self._name), self._value)
+        self._model.database.set(self._get_key_name(), self._value)
 
     def _obtain(self):
         if self._value is None:
             self._value = self._convert(self._model.database.get(
-                self._get_key_name(self._name)))
+                self._get_key_name()))
         return self._value
 
     def _validate(self, value):
@@ -323,7 +331,7 @@ class ForeignKey(ForeignObjectValidatorMixin, BaseField):
         if isinstance(value, Model):
             super()._assign(value.pk)
         elif value is None:
-            self._model.database.delete(self._get_key_name(self._name))
+            self._model.database.delete(self._get_key_name())
             self._value = None
         else:
             super()._assign(value)
@@ -351,7 +359,6 @@ class BaseHash(ModelField):
     _field_type_name = 'hash'
 
     def __init__(self, **kwargs):
-        self._updated = False
         super().__init__(**kwargs)
 
     def _assign(self, value):
@@ -359,7 +366,7 @@ class BaseHash(ModelField):
             raise ValueError("You're cannot save None value for %s"
                              % (self._name,))
         saved_value = self._validate(value)
-        self._model.database.hset(self._get_key_name(),
+        self._model.database.hset(self._get_key_name(True),
                                   self._name, saved_value)
         if self._model._hash_loaded:
             self._model._hash[self._name] = saved_value
@@ -374,7 +381,7 @@ class BaseHash(ModelField):
         self._model._hash_loaded = True
         self._model._hash = \
             self._model.database.hgetall(
-                self._get_key_name())
+                self._get_key_name(True))
         if not self._model._hash:  # None if hash field is not exist
             self._model._hash = {}
 
@@ -385,6 +392,10 @@ class BaseHash(ModelField):
     def _convert(self, value):
         """ Convert server answer to user type """
         raise NotImplementedError("Subclasses must implement _convert")
+
+    def _remove(self):
+        # self._model.database.delete(self._get_key_name(True))
+        self._model.database.hdel(self._get_key_name(True), self._name)
 
 
 class CharHash(CharValidatorMixin, BaseHash):
@@ -419,7 +430,7 @@ class ForeignKeyHash(ForeignObjectValidatorMixin, BaseHash):
         if isinstance(value, Model):
             super()._assign(value.pk)
         elif value is None:
-            self._model.database.hdel(self._get_key_name(), self._name)
+            self._model.database.hdel(self._get_key_name(True), self._name)
             if self._model._hash_loaded:
                 del self._model._hash[self._name]
         else:
@@ -458,7 +469,7 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
             return super().__getattribute__(item)
 
         original_command = getattr(self._model.database, item)
-        current_key = self._get_key_name(self._name)
+        current_key = self._get_key_name()
 
         def _method_wrapper(*args, **kwargs):
             # Scan passed args and convert to models is possible
@@ -483,9 +494,6 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
             return answer  # Direct answer
 
         return _method_wrapper
-
-    def _remove(self):
-        self._model.database.delete(self._get_key_name(self._name))
 
 
 class List(BaseCollection):

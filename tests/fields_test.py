@@ -169,6 +169,19 @@ class TestBooleanHash(CommonHelper):
         assert user1_read.paid is True
 
 
+class TestHashDelete(CommonHelper):
+    def test_deleted_operations_count(self):
+        class SampleObject1(models.Model):
+            name = models.CharHash()
+            rating = models.IntegerHash()
+            field1 = models.CharField()
+        SampleObject1.database = db
+        test_object = SampleObject1(1, name='Alice', rating=22, field1='test')
+        self.assert_commands_count(3)  # two times set hash + field
+        test_object.remove()
+        self.assert_commands_count(5)  # one time delete entire hash + field
+
+
 class TestDateHash(CommonHelper):
     def test_save_not_date_exception(self):
         user1 = UserObject(1)

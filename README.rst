@@ -42,8 +42,11 @@ So you can use it like this:
     >>> user.site_id = site
     >>> user.sites_list.lpush(site, site, site)
     3
-    >>> user.sites_list.lindex(2).name
+    >>> len(user.sites_list)
+    3
+    >>> user.sites_list[2].name
     'redis.io'
+
 
 
 Install

@@ -8,3 +8,4 @@ vagrant/.vagrant
 .eggs/
 .cache/
 *.egg-info/
+example.py
