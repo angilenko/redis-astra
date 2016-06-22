@@ -70,6 +70,14 @@ class TestModelField(CommonHelper):
         assert user_read.name is None
         self.assert_commands_count(1)
 
+    def test_default_values(self):
+        user1 = UserObject(1)
+        assert user1.name is None
+        assert user1.name != ''
+        assert user1.is_admin is False
+        assert user1.is_admin is not True
+        # assert user1.is_admin is None  # TODO: somehow problems with this it
+
     def test_redis_pass_arg_directly(self):
         db.hset = MagicMock()
         user1 = UserObject(1)
@@ -350,7 +358,13 @@ class TestBooleanField(CommonHelper):
         user1_read = UserObject(1)
         assert user1_read.is_admin is True
         assert user1_read.is_admin is True
-        self.assert_commands_count(2)
+        self.assert_commands_count(3)  # one set and two get
+
+    def test_save_boolean_and_read_twice(self):
+        user1 = UserObject(1)
+        user1.is_admin = False
+        assert user1.is_admin is False
+        assert user1.is_admin is False
 
 
 class TestList(CommonHelper):

@@ -135,7 +135,6 @@ class ModelField:
                 new_args.append(v)
             return original_command(*new_args, **kwargs)
 
-        self._value = None  # Reset cached value
         return _method_wrapper
 
     def _remove(self):
@@ -283,21 +282,18 @@ class BaseField(ModelField):
     _field_type_name = 'fld'
 
     def __init__(self, **kwargs):
-        self._value = None
         super().__init__(**kwargs)
 
     def _assign(self, value):
         if value is None:
             raise ValueError("You're cannot save None value for %s"
                              % (self._name,))
-        self._value = self._validate(value)
-        self._model.database.set(self._get_key_name(), self._value)
+        value = self._validate(value)
+        self._model.database.set(self._get_key_name(), value)
 
     def _obtain(self):
-        if self._value is None:
-            self._value = self._convert(self._model.database.get(
-                self._get_key_name()))
-        return self._value
+        value = self._model.database.get(self._get_key_name())
+        return self._convert(value)
 
     def _validate(self, value):
         """ Check saved value before send to server """
@@ -332,7 +328,6 @@ class ForeignKey(ForeignObjectValidatorMixin, BaseField):
             super()._assign(value.pk)
         elif value is None:
             self._model.database.delete(self._get_key_name())
-            self._value = None
         else:
             super()._assign(value)
 
