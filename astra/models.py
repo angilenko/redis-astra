@@ -23,7 +23,9 @@ class Model:
         if not pk:
             raise ValueError('You\'re must pass pk for object')
         self.pk = str(pk)  # Always convert to str for key-safe ops.
-        for k, v in vars(self.__class__).items():
+
+        for k in dir(self.__class__):  # vars() ignores parent variables
+            v = getattr(self.__class__, k)
             if isinstance(v, ModelField):
                 new_instance_of_field = v.__class__(instance=True, model=self,
                                                     name=k, **v._options)

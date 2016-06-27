@@ -4,8 +4,7 @@ import pytest
 import redis
 from unittest.mock import MagicMock
 from astra import models
-from tests.sample_model import SiteObject
-from .sample_model import UserObject as UserObject
+from .sample_model import UserObject, SiteObject, ParentExample, ChildExample
 
 
 # Patch redis. Connection method for collect command sequences for this test
@@ -25,6 +24,7 @@ class CommonHelper:
         db = redis.StrictRedis(host='127.0.0.1', decode_responses=True)
         UserObject.database = db
         SiteObject.database = db
+        ParentExample.database = db
         db.flushall()
         commands = []
 
@@ -566,3 +566,16 @@ class TestSortedSet(CommonHelper):
         user1.sites_sorted_set = None
         user1.remove()
         self.assert_keys_count(0)
+
+
+class TestParentInheritance(CommonHelper):
+    def test_set_and_get(self):
+        child1 = ChildExample()  # Custom constructor generates unique pk
+        child1.parent_field = 'test0'
+        child1.field1 = 'test1'
+
+        child1_id = child1.pk
+
+        read_child = ChildExample(child1_id)
+        assert read_child.parent_field == 'test0'
+        assert read_child.field1 == 'test1'
