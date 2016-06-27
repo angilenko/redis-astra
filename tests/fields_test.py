@@ -1,10 +1,13 @@
 import datetime as dt
-
+import sys
 import pytest
 import redis
-from unittest.mock import MagicMock
 from astra import models
 from .sample_model import UserObject, SiteObject, ParentExample, ChildExample
+
+PY_2 = sys.version_info.major == 2
+if not PY_2:
+    from unittest.mock import MagicMock
 
 
 # Patch redis. Connection method for collect command sequences for this test
@@ -78,6 +81,7 @@ class TestModelField(CommonHelper):
         assert user1.is_admin is not True
         # assert user1.is_admin is None  # TODO: somehow problems with this it
 
+    @pytest.mark.skipif(PY_2, reason="requires python3")
     def test_redis_pass_arg_directly(self):
         db.hset = MagicMock()
         user1 = UserObject(1)
@@ -86,6 +90,7 @@ class TestModelField(CommonHelper):
         db.hset.assert_called_once_with('astra::userobject::hash::1',
                                         'login', 1234)
 
+    @pytest.mark.skipif(PY_2, reason="requires python3")
     def test_custom_prefix_for_redis_model(self):
         db.hset = MagicMock()
         site1 = SiteObject(5)
@@ -103,6 +108,7 @@ class TestModelField(CommonHelper):
         assert user_read.login == 'user@null.com'
         self.assert_commands_count(3)
 
+    @pytest.mark.skipif(PY_2, reason="requires python3")
     def test_read_real_value(self):
         db.hgetall = MagicMock(return_value={'name': 'Username'})
         user1 = UserObject(1)

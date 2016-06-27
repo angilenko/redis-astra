@@ -3,7 +3,7 @@ import redis
 import sys
 
 
-class Model:
+class Model(object):
     """
     Parent class for all user-objects to be managed
     class Stream(models.Model):
@@ -40,7 +40,7 @@ class Model:
             field = self._fields[key]  # self.__class__.__dict__.get(key)
             field._assign(value)
         else:
-            return super().__setattr__(key, value)
+            return super(Model, self).__setattr__(key, value)
 
     def __getattribute__(self, key):
         if key == '_fields':
@@ -72,7 +72,7 @@ class Model:
         """
         if isinstance(other, Model):
             return self.pk == other.pk
-        return super().__eq__(other)
+        return super(Model, self).__eq__(other)
 
     def __repr__(self):
         return '<Model %s(pk=%s)>' % (self.__class__.__name__, self.pk)
@@ -90,7 +90,7 @@ class Model:
 
 
 # All model fields inherited from this
-class ModelField:
+class ModelField(object):
     # _model = None  # type: Model
     # _name = None  # type: str
     _directly_redis_helpers = ()  # Direct method helpers
@@ -144,7 +144,7 @@ class ModelField:
 
 
 # Validation rules common between hash and fields
-class CharValidatorMixin:
+class CharValidatorMixin(object):
     def _validate(self, value):
         if isinstance(value, bool):  # otherwise we've got "False" as value
             raise ValueError('Invalid type of field %s: %s.' %
@@ -155,7 +155,7 @@ class CharValidatorMixin:
         return value  # may be none if hash is not exists
 
 
-class BooleanValidatorMixin:
+class BooleanValidatorMixin(object):
     def _validate(self, value):
         if not isinstance(value, bool):
             raise ValueError('Invalid type of field %s: %s. Expected is bool' %
@@ -166,7 +166,7 @@ class BooleanValidatorMixin:
         return True if value == '1' else False
 
 
-class IntegerValidatorMixin:
+class IntegerValidatorMixin(object):
     def _validate(self, value):
         if not isinstance(value, int):
             raise ValueError('Invalid type of field %s: %s. Expected is int' %
@@ -182,7 +182,7 @@ class IntegerValidatorMixin:
             return None
 
 
-class DateValidatorMixin:
+class DateValidatorMixin(object):
     """
         We're store only seconds on redis. Using microseconds leads to subtle
         errors:
@@ -225,7 +225,7 @@ class DateTimeValidatorMixin(DateValidatorMixin):
         return dt.datetime.fromtimestamp(value)
 
 
-class EnumValidatorMixin:
+class EnumValidatorMixin(object):
     def __init__(self, enum=list(), **kwargs):
         if 'instance' not in kwargs:
             # Instant when user define EnumHash. Definition test
@@ -235,7 +235,7 @@ class EnumValidatorMixin:
                 if not isinstance(item, str) or item == '':
                     raise ValueError("Enum list item must be string")
         self._enum = enum
-        super().__init__(enum=enum, **kwargs)
+        super(EnumValidatorMixin, self).__init__(enum=enum, **kwargs)
 
     def _validate(self, value):
         if value not in self._enum:
@@ -246,9 +246,9 @@ class EnumValidatorMixin:
         return value if value in self._enum else None
 
 
-class ForeignObjectValidatorMixin:
+class ForeignObjectValidatorMixin(object):
     def __init__(self, to, **kwargs):
-        super().__init__(to=to, **kwargs)  # Load other first
+        super(ForeignObjectValidatorMixin, self).__init__(to=to, **kwargs)
         self._to = None
         if 'instance' not in kwargs:
             # First check
@@ -282,9 +282,6 @@ class ForeignObjectValidatorMixin:
 # Fields:
 class BaseField(ModelField):
     _field_type_name = 'fld'
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 
     def _assign(self, value):
         if value is None:
@@ -327,11 +324,11 @@ class ForeignKey(ForeignObjectValidatorMixin, BaseField):
         Support remove hash field if None passed as value
         """
         if isinstance(value, Model):
-            super()._assign(value.pk)
+            super(ForeignKey, self)._assign(value.pk)
         elif value is None:
             self._model.database.delete(self._get_key_name())
         else:
-            super()._assign(value)
+            super(ForeignKey, self)._assign(value)
 
     def _obtain(self):
         """
@@ -339,7 +336,7 @@ class ForeignKey(ForeignObjectValidatorMixin, BaseField):
         """
         if not self._to:
             raise RuntimeError('Relation model is not loaded')
-        value = super()._obtain()
+        value = super(ForeignKey, self)._obtain()
         return None if value is None else self._to(value)
 
 
@@ -351,12 +348,13 @@ class DateTimeField(DateTimeValidatorMixin, BaseField):
     _directly_redis_helpers = ('setex', 'setnx',)
 
 
+class EnumField(EnumValidatorMixin, BaseField):
+    pass
+
+
 # Hashes
 class BaseHash(ModelField):
     _field_type_name = 'hash'
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 
     def _assign(self, value):
         if value is None:
@@ -425,13 +423,13 @@ class ForeignKeyHash(ForeignObjectValidatorMixin, BaseHash):
         Support remove hash field if None passed as value
         """
         if isinstance(value, Model):
-            super()._assign(value.pk)
+            super(ForeignKeyHash, self)._assign(value.pk)
         elif value is None:
             self._model.database.hdel(self._get_key_name(True), self._name)
             if self._model._hash_loaded:
                 del self._model._hash[self._name]
         else:
-            super()._assign(value)
+            super(ForeignKeyHash, self)._assign(value)
 
     def _obtain(self):
         """
@@ -439,7 +437,7 @@ class ForeignKeyHash(ForeignObjectValidatorMixin, BaseHash):
         """
         if not self._to:
             raise RuntimeError('Relation model is not loaded')
-        value = super()._obtain()
+        value = super(ForeignKeyHash, self)._obtain()
         return None if value is None else self._to(value)
 
 
@@ -463,7 +461,7 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
 
     def __getattr__(self, item):
         if item not in self._allowed_redis_methods:
-            return super().__getattribute__(item)
+            return super(BaseCollection, self).__getattribute__(item)
 
         original_command = getattr(self._model.database, item)
         current_key = self._get_key_name()
@@ -495,9 +493,10 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
 
 class List(BaseCollection):
     """
-    :type lpush: attribute
+    :
     """
     _field_type_name = 'list'
+
     _allowed_redis_methods = ('lindex', 'linsert', 'llen', 'lpop', 'lpush',
                               'lpushx', 'lrange', 'lrem', 'lset', 'ltrim',
                               'rpop', 'rpoplpush', 'rpush', 'rpushx',)

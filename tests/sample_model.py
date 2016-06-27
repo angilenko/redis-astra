@@ -46,10 +46,10 @@ class ParentExample(models.Model):
     def __init__(self, pk=None, **kwargs):
         """ Custom designer can act as a PK generator """
         if not pk:
-            super().__init__(uuid.uuid4().hex, **kwargs)
+            super(ParentExample, self).__init__(uuid.uuid4().hex, **kwargs)
             self._ts = dt.datetime.now()
         elif pk:
-            super().__init__(pk, **kwargs)
+            super(ParentExample, self).__init__(pk, **kwargs)
 
     @property
     def exist(self):
