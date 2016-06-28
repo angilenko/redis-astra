@@ -5,7 +5,7 @@ import redis
 from astra import models
 from .sample_model import UserObject, SiteObject, ParentExample, ChildExample
 
-PY_2 = sys.version_info.major == 2
+PY_2 = sys.version_info[0] == 2
 if not PY_2:
     from unittest.mock import MagicMock
 
