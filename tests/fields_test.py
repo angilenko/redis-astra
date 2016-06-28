@@ -3,11 +3,12 @@ import sys
 import pytest
 import redis
 from astra import models
+from astra import signals
 from .sample_model import UserObject, SiteObject, ParentExample, ChildExample
 
 PY_2 = sys.version_info[0] == 2
 if not PY_2:
-    from unittest.mock import MagicMock
+    from unittest.mock import MagicMock, call
 
 
 # Patch redis. Connection method for collect command sequences for this test
@@ -43,6 +44,12 @@ class CommonHelper:
 
     def assert_keys_count(self, count):
         assert len(db.keys()) == count
+
+    # primitive mock for testing on Python 2
+    def simple_mock(self, *args, **kwargs):
+        if not hasattr(self, 'mock_calls'):
+            self.mock_calls = 0
+        self.mock_calls += 1
 
 
 # Test of base fields behavior
@@ -134,6 +141,11 @@ class TestModelField(CommonHelper):
 
         user_read = UserObject(1)
         assert user_read.name == 'Username'
+
+    def test_with_using_helper(self):
+        user1 = UserObject(1)
+        user1.credits_test_setex(10, 214)  # value: 214, 10 second ttl
+        assert user1.credits_test == 214
 
 
 # Test hash fields with value conversions:
@@ -585,3 +597,88 @@ class TestParentInheritance(CommonHelper):
         read_child = ChildExample(child1_id)
         assert read_child.parent_field == 'test0'
         assert read_child.field1 == 'test1'
+
+
+class TestSignalsFeature(CommonHelper):
+    def test_base_signal(self):
+        signals.pre_assign.connect(self.simple_mock)
+        user1 = UserObject(1)
+        user1.name = 'User1'
+        assert self.mock_calls == 1
+
+    @pytest.mark.skipif(PY_2, reason="requires python3")
+    def test_dispatched_params(self):
+        handler = MagicMock()
+        signals.pre_assign.connect(handler)
+        user1 = UserObject(1)
+        user1.name = 'User1'
+        handler.assert_called_with(value='User1', attr='name',
+                                   sender=UserObject, signal='pre_assign',
+                                   instance=user1)
+
+    @pytest.mark.skipif(PY_2, reason="requires python3")
+    def test_signal_filtering(self):
+        handle_any_assign = MagicMock()
+        signals.pre_assign.connect(handle_any_assign)
+
+        handle_site_assign = MagicMock()
+        signals.pre_assign.connect(handle_site_assign, SiteObject)
+
+        user1 = UserObject(1)
+        user1.name = 'User1'
+        site1 = SiteObject(1)
+        site1.name = 'example.com'
+
+        assert handle_any_assign.call_count == 2
+        assert handle_site_assign.call_count == 1
+
+    @pytest.mark.skipif(PY_2, reason="requires python3")
+    def test_signal_disconnecting(self):
+        handle1 = MagicMock()
+        handle2 = MagicMock()
+        signals.post_assign.connect(handle1)
+        signals.post_assign.connect(handle2)
+
+        user1 = UserObject(1)
+        user1.name = 'User1'
+
+        assert handle1.call_count == 1
+        assert handle2.call_count == 1
+
+        signals.post_assign.disconnect(handle2)
+
+        user1.name = 'User1 change name'
+        assert handle1.call_count == 2
+        assert handle2.call_count == 1
+
+    def test_assign_signals(self):
+        signals.post_init.connect(self.simple_mock)
+        UserObject(1, name='User1')
+        assert self.mock_calls == 1
+
+    def test_remove_signals(self):
+        signals.pre_remove.connect(self.simple_mock)
+        signals.post_remove.connect(self.simple_mock)
+        user1 = UserObject(1, name='User1')
+        user1.remove()
+        assert self.mock_calls == 2
+
+    @pytest.mark.skipif(PY_2, reason="requires python3")
+    def test_foreign_keys_signals(self):
+        handler = MagicMock()
+        signals.m2m_changed.connect(handler, UserObject)
+        user1 = UserObject(1, name='User1')
+        site1 = SiteObject(1, name='example.com')
+        user1.site_id = site1
+        user1.site_id = 1
+        user1.site_id = None
+
+        calls = [
+            call(action='link', attr='site_id', instance=user1, value=site1,
+                 sender=UserObject, signal='m2m_changed'),
+            call(action='link', attr='site_id', instance=user1, value=1,
+                 sender=UserObject, signal='m2m_changed'),
+            call(action='delete', attr='site_id', instance=user1, value=None,
+                 sender=UserObject, signal='m2m_changed')
+        ]
+        handler.assert_has_calls(calls)

@@ -1,8 +1,8 @@
 |PyPI Version| |Build Status|
 
-======
+==================
 redis-astra
-======
+==================
 
 Redis-astra is Python light ORM for Redis
 
@@ -48,11 +48,29 @@ So you can use it like this:
     'redis.io'
 
 
+Redis-astra supported signals, based on PyDispatcher:
+
+.. code:: python
+
+    from astra import signals
+
+    def save_handler(**kwargs):
+        print(kwargs)
+
+    signals.post_init.connect(save_handler)
+    signals.post_assign.connect(save_handler)
+
+    >>> user = UserObject(pk=1, name="Mike", viewers=5)
+    {'signal': 'post_init', 'instance': <Model UserObject(pk=1)>, 'sender': <class '__main__.UserObject'>}
+
+    >>> user.login = 'mike@null.com'
+    {'signal': 'post_assign', 'value': 'mike@null.com', 'instance': <Model UserObject(pk=1)>, 'attr': 'login', 'sender': <class '__main__.UserObject'>}
+
 
 Install
-=======
+==================
 
-Python versions 3.3, 3.4, 3.5 are supported.
+Python versions 2.6, 2.7, 3.3, 3.4, 3.5 are supported
 Redis-py versions >= 2.9.1
 
 .. code:: bash
