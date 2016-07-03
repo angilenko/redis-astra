@@ -9,7 +9,11 @@ class ModelSignal(object):
         self.handler_args = handler_args
 
     def send(self, sender=Anonymous, **kwargs):
-        params = {k: v for k, v in kwargs.items() if k in self.handler_args}
+        # params = {k: v for k, v in kwargs.items() if k in self.handler_args}
+        params = {}
+        for k, v in kwargs.items():
+            if k in self.handler_args:
+                params[k] = v
         dispatcher.send(self.signal, sender, **params)
 
     def connect(self, receiver, sender=Any):
