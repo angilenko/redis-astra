@@ -53,11 +53,18 @@ setup(
         'Programming Language :: Python :: 3.5',
         ],
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
+    data_files=[
+        (
+            'shared/typehints/python{}.{}'.format(*sys.version_info[:2]),
+            # path.join(here, 'astra/*.pyi')
+            './astra/*.pyi'
+        ),
+        ],
     install_requires=['redis>=2.9.1', 'PyDispatcher>=2.0.5', 'six>=1.10.0'],
     extras_require={
         'dev': ['check-manifest'],
         'test': ['coverage', 'mock'],
-        },
+    },
     tests_require=['pytest>=2.5.0'],
     cmdclass={'test': PyTest},
 )
