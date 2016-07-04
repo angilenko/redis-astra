@@ -54,11 +54,7 @@ setup(
         ],
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     data_files=[
-        (
-            'shared/typehints/python{}.{}'.format(*sys.version_info[:2]),
-            # path.join(here, 'astra/*.pyi')
-            './astra/*.pyi'
-        ),
+        ('', ['astra/models.pyi']),
         ],
     install_requires=['redis>=2.9.1', 'PyDispatcher>=2.0.5', 'six>=1.10.0'],
     extras_require={
