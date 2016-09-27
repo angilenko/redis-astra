@@ -115,7 +115,6 @@ class EnumValidatorMixin(object):
 class ForeignObjectValidatorMixin(object):
     def __init__(self, to=None, **kwargs):
         super(ForeignObjectValidatorMixin, self).__init__(to=to, **kwargs)
-        self._to = None
         if to is None:
             return
 
@@ -127,7 +126,7 @@ class ForeignObjectValidatorMixin(object):
                 raise AttributeError("You're must define to as string"
                                      " or Model class")
         else:
-            # When object constructed, relation model can be loaded
+            # Replace _to method to foreign constructor
             to_path = to.split('.')
             object_rel = to_path.pop()
             package_rel = '.'.join(to_path)
@@ -148,3 +147,7 @@ class ForeignObjectValidatorMixin(object):
 
     def _convert(self, value):
         return value
+
+    def _to(self, key):
+        # This method may be replaced to foreign model constructor
+        return key

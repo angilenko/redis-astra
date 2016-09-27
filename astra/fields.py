@@ -169,7 +169,7 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
         def _method_wrapper(*args, **kwargs):
             from astra import models
 
-            # Scan passed args and convert to models is possible
+            # Scan passed args and convert to pk if passed models
             new_args = [current_key]
             new_kwargs = dict()
             for v in args:
@@ -180,6 +180,7 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
             # Call original method on the database
             answer = original_command(*new_args, **new_kwargs)
 
+            # Wrap to model
             if item in self._single_object_answered_redis_methods:
                 return None if not answer else self._to(answer)
             if item in self._list_answered_redis_methods:

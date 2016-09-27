@@ -1,4 +1,4 @@
-v1.0.0 - 2016-09-27
+v1.0.1 - 2016-09-27
 =================
 
 - List, Set and SortedSet not necessarily refer to other models

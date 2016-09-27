@@ -479,19 +479,28 @@ class TestList(CommonHelper):
 
 class TestSimpleSet(CommonHelper):
     def test_without_foreign(self):
-        user = SiteObject(1)
-        user.tags.sadd('games')
-        user.tags.sadd('shooter')
-        assert user.tags.sismember('games') is True
-        assert user.tags.sismember('shooter') is True
-        assert user.tags.sismember('business') is False
+        site = SiteObject(1)
+        site.tags.sadd('games')
+        site.tags.sadd('shooter')
+        assert site.tags.sismember('games') is True
+        assert site.tags.sismember('shooter') is True
+        assert site.tags.sismember('business') is False
 
     def test_convert_to_str(self):
-        user = SiteObject(1)
-        user.tags.sadd(123)
-        assert user.tags.sismember(123) is True
-        assert user.tags.sismember('123') is True
-        assert user.tags.sismember(456) is False
+        site = SiteObject(1)
+        site.tags.sadd(123)
+        assert site.tags.sismember(123) is True
+        assert site.tags.sismember('123') is True
+        assert site.tags.sismember(456) is False
+
+    def test_get_items(self):
+        site = SiteObject(1)
+        site.tags.sadd('fast')
+        site.tags.sadd('bootstrap')
+        ret = site.tags.smembers()
+        assert isinstance(ret, list)
+        assert 'fast' in ret
+        assert 'magenta' not in ret
 
 
 class TestSet(CommonHelper):
