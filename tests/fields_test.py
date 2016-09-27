@@ -75,18 +75,20 @@ class TestModelField(CommonHelper):
         user2 = UserObject(name='Username', pk=2)
         assert user2.name == 'Username'
 
-    def test_non_existing_object_default_value(self):
-        user_read = UserObject(1)
-        assert user_read.name is None
-        self.assert_commands_count(1)
-
     def test_default_values(self):
         user1 = UserObject(1)
-        assert user1.name is None
-        assert user1.name != ''
+        assert isinstance(user1.name, str)
+        assert user1.name == ''
+        assert isinstance(user1.is_admin, bool)
         assert user1.is_admin is False
-        assert user1.is_admin is not True
-        # assert user1.is_admin is None  # TODO: somehow problems with this it
+        assert isinstance(user1.rating, int)
+        assert user1.rating == 0
+
+    def test_pk_already_string(self):
+        user1 = UserObject(1)
+        assert isinstance(user1.pk, str)
+        user1 = UserObject('2')
+        assert isinstance(user1.pk, str)
 
     @pytest.mark.skipif(PY_2, reason="requires python3")
     def test_redis_pass_arg_directly(self):
@@ -120,7 +122,7 @@ class TestModelField(CommonHelper):
         db.hgetall = MagicMock(return_value={'name': 'Username'})
         user1 = UserObject(1)
         assert user1.name == 'Username'
-        assert user1.login is None
+        assert user1.login == ''
 
         # About Mock: https://docs.python.org/dev/library/unittest.mock.html
         # db.execute_command = MagicMock(return_value=3)
@@ -256,11 +258,15 @@ class TestEnumHash(CommonHelper):
 
         with pytest.raises(ValueError):
             class SampleObject2(models.Model):
-                field = models.EnumHash(enum=('',))
+                field = models.EnumHash(enum=('',), default='')
 
         with pytest.raises(ValueError):
             class SampleObject3(models.Model):
-                field = models.EnumHash(enum=(123, '43'))
+                field = models.EnumHash(enum=(123, '43'), default='43')
+
+    def test_get_enum_default_value(self):
+        user1 = UserObject(1)
+        assert user1.status == 'REGISTERED'
 
     def test_save_not_enum_value(self):
         user1 = UserObject(1)
@@ -384,7 +390,6 @@ class TestBooleanField(CommonHelper):
         assert user1.is_admin is False
         assert user1.is_admin is False
 
-
 class TestList(CommonHelper):
     def test_append_to_list_left_and_right(self):
         site1 = SiteObject(1, name='redis.io')
@@ -470,6 +475,23 @@ class TestList(CommonHelper):
         # user1.sites_list = None
         user1.remove()
         self.assert_keys_count(0)
+
+
+class TestSimpleSet(CommonHelper):
+    def test_without_foreign(self):
+        user = SiteObject(1)
+        user.tags.sadd('games')
+        user.tags.sadd('shooter')
+        assert user.tags.sismember('games') is True
+        assert user.tags.sismember('shooter') is True
+        assert user.tags.sismember('business') is False
+
+    def test_convert_to_str(self):
+        user = SiteObject(1)
+        user.tags.sadd(123)
+        assert user.tags.sismember(123) is True
+        assert user.tags.sismember('123') is True
+        assert user.tags.sismember(456) is False
 
 
 class TestSet(CommonHelper):

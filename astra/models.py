@@ -156,8 +156,7 @@ class EnumField(validators.EnumValidatorMixin, fields.BaseField):
     pass
 
 
-
-
+# Hashes
 class CharHash(validators.CharValidatorMixin, fields.BaseHash):
     pass
 

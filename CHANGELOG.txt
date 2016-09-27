@@ -1,0 +1,6 @@
+v1.0.0 - 2016-09-27
+=================
+
+- List, Set and SortedSet not necessarily refer to other models
+- Integer and Char fields return 0 and '' instead None if not assigned
+- Enum must have default value

@@ -8,6 +8,7 @@ class SiteObject(models.Model):
     prefix = 'custom_prefix'
 
     name = models.CharHash()
+    tags = models.Set()  # Just a text set
 
 
 class UserObject(models.Model):
@@ -24,7 +25,7 @@ class UserObject(models.Model):
     paid = models.BooleanHash()
     registration_date = models.DateHash()
     last_login = models.DateTimeHash()
-    status = models.EnumHash(enum=status_choice)
+    status = models.EnumHash(enum=status_choice, default='REGISTERED')
     inviter = models.ForeignKeyHash(to='tests.sample_model.UserObject')
     site_id = models.ForeignKey(to='SiteObject')
 

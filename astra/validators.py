@@ -13,7 +13,7 @@ class CharValidatorMixin(object):
         return value
 
     def _convert(self, value):
-        return value  # may be none if hash is not exists
+        return value if value is not None else ''
 
 
 class BooleanValidatorMixin(object):
@@ -36,7 +36,7 @@ class IntegerValidatorMixin(object):
 
     def _convert(self, value):
         if value is None:
-            return None
+            return 0
         try:
             return int(value)
         except ValueError:
@@ -87,7 +87,7 @@ class DateTimeValidatorMixin(DateValidatorMixin):
 
 
 class EnumValidatorMixin(object):
-    def __init__(self, enum=list(), **kwargs):
+    def __init__(self, enum=list(), default='', **kwargs):
         if 'instance' not in kwargs:
             # Instant when user define EnumHash. Definition test
             if len(enum) < 1:
@@ -95,8 +95,13 @@ class EnumValidatorMixin(object):
             for item in enum:
                 if not isinstance(item, string_types) or item == '':
                     raise ValueError("Enum list item must be string")
+            if default not in enum:
+                raise ValueError("the default value is not present "
+                                 "in the enum list")
         self._enum = enum
-        super(EnumValidatorMixin, self).__init__(enum=enum, **kwargs)
+        self._enum_default = default
+        super(EnumValidatorMixin, self).__init__(
+            enum=enum, default=default, **kwargs)
 
     def _validate(self, value):
         if value not in self._enum:
@@ -104,13 +109,16 @@ class EnumValidatorMixin(object):
         return value
 
     def _convert(self, value):
-        return value if value in self._enum else None
+        return value if value in self._enum else self._enum_default
 
 
 class ForeignObjectValidatorMixin(object):
-    def __init__(self, to, **kwargs):
+    def __init__(self, to=None, **kwargs):
         super(ForeignObjectValidatorMixin, self).__init__(to=to, **kwargs)
         self._to = None
+        if to is None:
+            return
+
         if 'instance' not in kwargs:
             # First check
             from astra import models
