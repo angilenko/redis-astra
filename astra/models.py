@@ -102,16 +102,16 @@ class Model(object):
 class CharField(validators.CharValidatorMixin, fields.BaseField):
     _directly_redis_helpers = ('setex', 'setnx', 'append', 'bitcount',
                                'getbit', 'getrange', 'setbit', 'setrange',
-                               'strlen',)
+                               'strlen', 'expire', 'ttl')
 
 
 class BooleanField(validators.BooleanValidatorMixin, fields.BaseField):
-    _directly_redis_helpers = ('setex', 'setnx',)
+    _directly_redis_helpers = ('setex', 'setnx', 'expire', 'ttl',)
 
 
 class IntegerField(validators.IntegerValidatorMixin, fields.BaseField):
     _directly_redis_helpers = ('setex', 'setnx', 'incr', 'incrby', 'decr',
-                               'decrby', 'getset',)
+                               'decrby', 'getset', 'expire', 'ttl',)
 
 
 class ForeignKey(validators.ForeignObjectValidatorMixin, fields.BaseField):
@@ -145,11 +145,11 @@ class ForeignKey(validators.ForeignObjectValidatorMixin, fields.BaseField):
 
 
 class DateField(validators.DateValidatorMixin, fields.BaseField):
-    _directly_redis_helpers = ('setex', 'setnx',)
+    _directly_redis_helpers = ('setex', 'setnx', 'expire', 'ttl',)
 
 
 class DateTimeField(validators.DateTimeValidatorMixin, fields.BaseField):
-    _directly_redis_helpers = ('setex', 'setnx',)
+    _directly_redis_helpers = ('setex', 'setnx', 'expire', 'ttl',)
 
 
 class EnumField(validators.EnumValidatorMixin, fields.BaseField):
