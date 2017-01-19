@@ -197,19 +197,6 @@ class TestBooleanHash(CommonHelper):
         assert user1_read.paid is True
 
 
-class TestHashDelete(CommonHelper):
-    def test_deleted_operations_count(self):
-        class SampleObject1(models.Model):
-            name = models.CharHash()
-            rating = models.IntegerHash()
-            field1 = models.CharField()
-        SampleObject1.database = db
-        test_object = SampleObject1(1, name='Alice', rating=22, field1='test')
-        self.assert_commands_count(3)  # two times set hash + field
-        test_object.remove()
-        self.assert_commands_count(5)  # one time delete entire hash + field
-
-
 class TestDateHash(CommonHelper):
     def test_save_not_date_exception(self):
         user1 = UserObject(1)
@@ -280,52 +267,18 @@ class TestEnumHash(CommonHelper):
         assert user1_read.status == UserObject.status_choice[1]
 
 
-class TestLinkHash(CommonHelper):
-    def test_invalid_model_define_exception(self):
-        with pytest.raises(AttributeError):
-            class SampleObject1(models.Model):
-                user = models.ForeignKeyHash(to=123)
+class TestHashDelete(CommonHelper):
+    def test_deleted_operations_count(self):
+        class SampleObject1(models.Model):
+            name = models.CharHash()
+            rating = models.IntegerHash()
+            field1 = models.CharField()
 
-        with pytest.raises(AttributeError):
-            class SampleObject2(models.Model):
-                user = models.ForeignKeyHash(to=CommonHelper)
-
-    def test_save_invalid_value(self):
-        user1 = UserObject(1)
-        with pytest.raises(ValueError):
-            user1.inviter = False  # Boolean not converted to str
-
-    def test_save_valid_value_as_int(self):
-        user1 = UserObject(1, name='Username')
-        user2 = UserObject(2)
-        user2.inviter = 1
-        self.assert_commands_count(2)
-
-        user_reader2 = UserObject(2)
-        assert isinstance(user_reader2.inviter, UserObject)
-        self.assert_commands_count(3)
-
-        assert user_reader2.inviter.pk == user1.pk
-        self.assert_commands_count(3)
-
-    def test_save_valid_value_as_instance_of_model(self):
-        user1 = UserObject(1, name='Username')
-        user2 = UserObject(2)
-        user2.inviter = user1
-        user_reader2 = UserObject(2)
-        assert isinstance(user_reader2.inviter, UserObject)
-        assert user_reader2.inviter.pk == user1.pk
-
-    def test_delete_existing_value_with_none(self):
-        user1 = UserObject(1, name='Username')
-        user2 = UserObject(2)
-        user2.inviter = user1
-        user_reader2 = UserObject(2)
-        assert user_reader2.inviter.pk == user1.pk
-        user2_modifier = UserObject(2)
-        user2_modifier.inviter = None
-        user_reader2 = UserObject(2)
-        assert user_reader2.inviter is None
+        SampleObject1.database = db
+        test_object = SampleObject1(1, name='Alice', rating=22, field1='test')
+        self.assert_commands_count(3)  # two times set hash + field
+        test_object.remove()
+        self.assert_commands_count(5)  # one time delete entire hash + field
 
 
 class TestLinkField(CommonHelper):
@@ -389,6 +342,16 @@ class TestBooleanField(CommonHelper):
         user1.is_admin = False
         assert user1.is_admin is False
         assert user1.is_admin is False
+
+
+class TestFieldDelete(CommonHelper):
+    def test_invalidate_when_remove(self):
+        user1 = UserObject(pk=1, credits_test=20)
+        instance_user1 = UserObject(1)
+        user1.remove()
+        assert user1.credits_test == 0
+        assert instance_user1.credits_test == 0
+
 
 class TestList(CommonHelper):
     def test_append_to_list_left_and_right(self):
@@ -577,6 +540,20 @@ class TestSortedSet(CommonHelper):
         answered_list = user1_read.sites_sorted_set.zrangebyscore(201, 300)
         assert len(answered_list) == 1
         assert answered_list[0] == site2
+
+    def test_get_with_scores(self):
+        user1 = UserObject(1)
+        for i in range(1, 10):
+            site = SiteObject(i)
+            user1.sites_sorted_set.zadd(i*100, site)
+
+        with_scores = user1.sites_sorted_set.zrangebyscore('-inf', '+inf',
+                                                           withscores=True)
+        assert isinstance(with_scores, list)
+        first_item = with_scores[0]
+        assert isinstance(first_item, tuple)
+        assert isinstance(first_item[0], SiteObject)
+        assert isinstance(first_item[1], float)
 
     def test_get_by_slice(self):
         site1 = SiteObject(1)

@@ -26,7 +26,7 @@ class UserObject(models.Model):
     registration_date = models.DateHash()
     last_login = models.DateTimeHash()
     status = models.EnumHash(enum=status_choice, default='REGISTERED')
-    inviter = models.ForeignKeyHash(to='tests.sample_model.UserObject')
+    inviter = models.ForeignKey(to='tests.sample_model.UserObject')
     site_id = models.ForeignKey(to='SiteObject')
 
     credits_test = models.IntegerField()

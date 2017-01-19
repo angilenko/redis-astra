@@ -1,3 +1,10 @@
+v1.0.3 - 2017-01-20
+=================
+- (!) Deprecated type: ForeignKeyHash. Link now must be ForeignKey
+- Support "withscores" in zrange, zrangebyscore, zrevrange, zrevrangebyscore
+methods. This methods return list of tuples
+
+
 v1.0.2 - 2016-12-06
 =================
 - Minor fixes: support ttl, expire commands for scalar fields

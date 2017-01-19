@@ -23,7 +23,7 @@ Example:
         database = db
         name = models.CharHash()
         login = models.CharHash()
-        site_id = models.ForeignKeyHash(to='SiteObject')
+        site_id = models.ForeignKey(to='SiteObject')
         sites_list = models.List(to='SiteObject')
         viewers = models.IntegerField()
 

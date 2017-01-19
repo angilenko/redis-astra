@@ -183,10 +183,17 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
             # Wrap to model
             if item in self._single_object_answered_redis_methods:
                 return None if not answer else self._to(answer)
+
             if item in self._list_answered_redis_methods:
                 wrapper_answer = []
                 for pk in answer:
-                    wrapper_answer.append(None if not pk else self._to(pk))
+                    if not pk:
+                        wrapper_answer.append(None)
+                    else:
+                        if isinstance(pk, tuple) and len(pk) > 0:
+                            wrapper_answer.append((self._to(pk[0]), pk[1]))
+                        else:
+                            wrapper_answer.append(self._to(pk))
 
                 return wrapper_answer
             return answer  # Direct answer

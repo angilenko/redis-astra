@@ -181,38 +181,6 @@ class EnumHash(validators.EnumValidatorMixin, fields.BaseHash):
     pass
 
 
-class ForeignKeyHash(validators.ForeignObjectValidatorMixin, fields.BaseHash):
-    def _assign(self, value, suppress_signal=False):
-        """
-        Support remove hash field if None passed as value
-        """
-        if isinstance(value, Model):
-            super(ForeignKeyHash, self)._assign(value.pk)
-            signal = dict(sender=self._model.__class__, instance=self._model,
-                          attr=self._name, action='link', value=value)
-        elif value is None:
-            self._model.database.hdel(self._get_key_name(True), self._name)
-            if self._model._hash_loaded:
-                del self._model._hash[self._name]
-            signal = dict(sender=self._model.__class__, instance=self._model,
-                          attr=self._name, action='delete', value=None)
-        else:
-            super(ForeignKeyHash, self)._assign(value)
-            signal = dict(sender=self._model.__class__, instance=self._model,
-                          attr=self._name, action='link', value=value)
-
-        not suppress_signal and signals.m2m_changed.send(**signal)
-
-    def _obtain(self):
-        """
-        Convert saved pk to target object
-        """
-        if not self._to:
-            raise RuntimeError('Relation model is not loaded')
-        value = super(ForeignKeyHash, self)._obtain()
-        return None if value is None else self._to(value)
-
-
 class List(fields.BaseCollection):
     """
     :
