@@ -9,3 +9,4 @@ vagrant/.vagrant
 .cache/
 *.egg-info/
 example.py
+test.sh

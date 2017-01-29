@@ -5,19 +5,23 @@ import datetime as dt
 
 
 class SiteObject(models.Model):
+    # database = db
+
     prefix = 'custom_prefix'
 
     name = models.CharHash()
     tags = models.Set()  # Just a text set
+    some_child = models.ForeignKey(to='ChildExample')  # type: ChildExample
 
 
 class UserObject(models.Model):
+    # database = db
+
     status_choice = (
         'REGISTERED',
         'ACTIVATED',
         'BANNED',
     )
-    # database = db
 
     name = models.CharHash()
     login = models.CharHash()
@@ -28,6 +32,7 @@ class UserObject(models.Model):
     status = models.EnumHash(enum=status_choice, default='REGISTERED')
     inviter = models.ForeignKey(to='tests.sample_model.UserObject')
     site_id = models.ForeignKey(to='SiteObject')
+    site2 = models.ForeignKey(to='SiteObject', defaultPk=0)  # type: SiteObject
 
     credits_test = models.IntegerField()
     is_admin = models.BooleanField()

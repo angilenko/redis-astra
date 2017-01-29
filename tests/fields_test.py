@@ -690,3 +690,22 @@ class TestSignalsFeature(CommonHelper):
                  sender=UserObject, signal='m2m_changed')
         ]
         handler.assert_has_calls(calls)
+
+
+class TestDeepAttributes(CommonHelper):
+    def test_access_to_none_attribute(self):
+        user1 = UserObject(1, name='User1')
+        # site1 = SiteObject(1, name='example.com')
+        # user1.site_id = site1
+
+        assert user1.site_id is None
+
+    def test_exception_to_deep_attribute(self):
+        user1 = UserObject(1, name='User1')
+        with pytest.raises(AttributeError):
+            # 'NoneType' object has no attribute 'some_child'
+            k = user1.site_id.some_child
+
+    def test_deep_attribute_with_default_model(self):
+        user1 = UserObject(1, name='User1')
+        assert user1.site2.some_child is None

@@ -34,10 +34,10 @@ class ModelField(object):
         return '::'.join(items)
 
     def _assign(self, value, suppress_signal=False):
-        raise NotImplementedError("Subclasses must implement _assign")
+        raise NotImplementedError('Subclasses must implement _assign')
 
     def _obtain(self):
-        raise NotImplementedError("Subclasses must implement _obtain")
+        raise NotImplementedError('Subclasses must implement _obtain')
 
     def _helper(self, method_name):
         if method_name not in self._directly_redis_helpers:
@@ -84,11 +84,11 @@ class BaseField(ModelField):
 
     def _validate(self, value):
         """ Check saved value before send to server """
-        raise NotImplementedError("Subclasses must implement _validate")
+        raise NotImplementedError('Subclasses must implement _validate')
 
     def _convert(self, value):
         """ Convert server answer to user type """
-        raise NotImplementedError("Subclasses must implement _convert")
+        raise NotImplementedError('Subclasses must implement _convert')
 
 
 # Hashes
@@ -130,11 +130,11 @@ class BaseHash(ModelField):
 
     def _validate(self, value):
         """ Check saved value before send to server """
-        raise NotImplementedError("Subclasses must implement _validate")
+        raise NotImplementedError('Subclasses must implement _validate')
 
     def _convert(self, value):
         """ Convert server answer to user type """
-        raise NotImplementedError("Subclasses must implement _convert")
+        raise NotImplementedError('Subclasses must implement _convert')
 
     def _remove(self):
         # self._model.database.delete(self._get_key_name(True))
@@ -156,8 +156,8 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
         if value is None:
             self._remove()
         else:
-            raise ValueError("Collections fields is not possible "
-                             "assign directly")
+            raise ValueError('Collections fields is not possible '
+                             'assign directly')
 
     def __getattr__(self, item):
         if item not in self._allowed_redis_methods:
@@ -199,4 +199,3 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
             return answer  # Direct answer
 
         return _method_wrapper
-

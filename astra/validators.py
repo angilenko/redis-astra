@@ -61,7 +61,7 @@ class DateValidatorMixin(object):
                              (self._name, type(value).__name__))
 
         # return round(value.timestamp())  # without microseconds
-        return value.strftime("%s")  # both class implements it
+        return value.strftime('%s')  # both class implements it
 
     def _convert(self, value):
         if not value:
@@ -91,13 +91,13 @@ class EnumValidatorMixin(object):
         if 'instance' not in kwargs:
             # Instant when user define EnumHash. Definition test
             if len(enum) < 1:
-                raise AttributeError("You're must define enum list")
+                raise AttributeError('You\'re must define enum list')
             for item in enum:
                 if not isinstance(item, string_types) or item == '':
-                    raise ValueError("Enum list item must be string")
+                    raise ValueError('Enum list item must be string')
             if default not in enum:
-                raise ValueError("the default value is not present "
-                                 "in the enum list")
+                raise ValueError('The default value is not present '
+                                 'in the enum list')
         self._enum = enum
         self._enum_default = default
         super(EnumValidatorMixin, self).__init__(
@@ -113,8 +113,11 @@ class EnumValidatorMixin(object):
 
 
 class ForeignObjectValidatorMixin(object):
-    def __init__(self, to=None, **kwargs):
-        super(ForeignObjectValidatorMixin, self).__init__(to=to, **kwargs)
+    def __init__(self, to=None, defaultPk=None, **kwargs):
+        super(ForeignObjectValidatorMixin, self).__init__(
+            to=to, defaultPk=defaultPk, **kwargs)
+        self._defaultPk = defaultPk
+
         if to is None:
             return
 
@@ -123,8 +126,8 @@ class ForeignObjectValidatorMixin(object):
             from astra import models
             if not isinstance(to, string_types) \
                     and not isinstance(to, models.Model):
-                raise AttributeError("You're must define to as string"
-                                     " or Model class")
+                raise AttributeError('You\'re must define to as string'
+                                     ' or Model class')
         else:
             # Replace _to method to foreign constructor
             to_path = to.split('.')
@@ -149,5 +152,15 @@ class ForeignObjectValidatorMixin(object):
         return value
 
     def _to(self, key):
-        # This method may be replaced to foreign model constructor
+        # Return string key when for models.ForeignKey not specified "to"
+        # attribute. e.g. author_id = models.ForeignKey()
         return key
+
+    def _to_wrapper(self, key):
+        if key is None:
+            if self._defaultPk is not None:
+                return self._to(self._defaultPk)
+            else:
+                return None
+
+        return self._to(key)

@@ -23,7 +23,7 @@ Example:
         database = db
         name = models.CharHash()
         login = models.CharHash()
-        site_id = models.ForeignKey(to='SiteObject')
+        site = models.ForeignKey(to='SiteObject')
         sites_list = models.List(to='SiteObject')
         viewers = models.IntegerField()
 
@@ -39,7 +39,7 @@ So you can use it like this:
     >>> user.viewers_incr(2)
     7
     >>> site = SiteObject(pk=1, name="redis.io")
-    >>> user.site_id = site
+    >>> user.site = site
     >>> user.sites_list.lpush(site, site, site)
     3
     >>> len(user.sites_list)

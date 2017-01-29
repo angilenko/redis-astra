@@ -1,3 +1,17 @@
+v1.0.4 - 2017-01-29
+=================
+- Allow use '0' or 0 as object's pk
+- defaultPk attribute for ForeignKey provide default object for not
+  assigned foreign object. This feature provide access to deep properties
+  without risk of catch AttributeError. Eg: o = user.site.owner, where site
+  and owner is ForeignKey to other model, but site is not set. In simple case
+  we're catch AttributeError: 'NoneType' object has no attribute 'owner'. But,
+  when site is ForeignKey(to='Site', defaultPk=0), then site always
+  present as 'Site' model. At the moment, you need provide your 'Site'
+  behavior with pk key is 0.
+- Performance improvement: models using lazy initialization now
+
+
 v1.0.3 - 2017-01-20
 =================
 - (!) Deprecated type: ForeignKeyHash. Link now must be ForeignKey

@@ -21,11 +21,22 @@ class Model(object):
         self._helpers = set()
         self._hash = {}  # Hash-object cache
         self._hash_loaded = False
+        self._fields_loaded = False
         assert isinstance(self.database, redis.StrictRedis)
 
-        if not pk:
+        if pk is None:
             raise ValueError('You\'re must pass pk for object')
         self.pk = str(pk)  # Always convert to str for key-safe ops.
+
+        # When object initialize with parameters, for example
+        # user1 = UserObject(1, name='Username'), then load fields from/to db
+        # immediate. When object initialized as user2 = UserObject(1), then
+        # information from database not obtain before first data handling
+        if kwargs:
+            self._load_fields(**kwargs)
+
+    def _load_fields(self, **kwargs):
+        self._fields_loaded = True
 
         for k in dir(self.__class__):  # vars() ignores parent variables
             v = getattr(self.__class__, k)
@@ -41,15 +52,24 @@ class Model(object):
         keys and signals.post_init.send(sender=self.__class__, instance=self)
 
     def __setattr__(self, key, value):
-        if hasattr(self, '_fields') and key in self._fields.keys():
+        if key in ('_fields', '_helpers', '_hash', '_hash_loaded', 'pk',
+                   '_fields_loaded'):
+            return super(Model, self).__setattr__(key, value)
+
+        if key in self._fields.keys():
             field = self._fields[key]  # self.__class__.__dict__.get(key)
             field._assign(value)
         else:
             return super(Model, self).__setattr__(key, value)
 
     def __getattribute__(self, key):
+        # When someone request _fields, then start lazy loading...
+        if key == '_fields' and not self._fields_loaded:
+            self._load_fields()
+
+        # Keys + some internal methods
         internal_keys = ('_fields', 'database', '__class__', 'prefix',
-                         '_hash_loaded')
+                         '_hash_loaded', '_fields_loaded', '_load_fields')
         if key in internal_keys:
             return object.__getattribute__(self, key)
 
@@ -141,7 +161,7 @@ class ForeignKey(validators.ForeignObjectValidatorMixin, fields.BaseField):
         if not self._to:
             raise RuntimeError('Relation model is not loaded')
         value = super(ForeignKey, self)._obtain()
-        return None if value is None else self._to(value)
+        return self._to_wrapper(value)
 
 
 class DateField(validators.DateValidatorMixin, fields.BaseField):
