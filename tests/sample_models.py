@@ -2,6 +2,12 @@ import uuid
 
 from astra import models
 import datetime as dt
+import sys
+
+PY_2 = sys.version_info[0] == 2
+if PY_2:
+    # Autoload only for Python 3 (see TestAutoImport for more info)
+    from .other_models import SiteColorModel
 
 
 class SiteObject(models.Model):

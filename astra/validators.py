@@ -136,7 +136,13 @@ class ForeignObjectValidatorMixin(object):
             if package_rel == '':
                 package_rel = self._model.__class__.__module__
             if package_rel not in sys.modules.keys():
-                __import__(package_rel)  # may throw ImportError
+                if sys.version_info[0] == 3:
+                    import importlib
+                    importlib.import_module(package_rel)
+                else:
+                    raise AttributeError('Sorry, but model "%s" must already '
+                                         'imported for Python < 3' %
+                                         package_rel)
 
             try:
                 self._to = getattr(sys.modules[package_rel], object_rel)
