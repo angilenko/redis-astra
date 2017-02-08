@@ -12,6 +12,8 @@ class SiteObject(models.Model):
     name = models.CharHash()
     tags = models.Set()  # Just a text set
     some_child = models.ForeignKey(to='ChildExample')  # type: ChildExample
+    site_color = models.ForeignKey(to='tests.other_models.SiteColorModel',
+                                   defaultPk=2)
 
 
 class UserObject(models.Model):
@@ -30,17 +32,17 @@ class UserObject(models.Model):
     registration_date = models.DateHash()
     last_login = models.DateTimeHash()
     status = models.EnumHash(enum=status_choice, default='REGISTERED')
-    inviter = models.ForeignKey(to='tests.sample_model.UserObject')
+    inviter = models.ForeignKey(to='tests.sample_models.UserObject')
     site_id = models.ForeignKey(to='SiteObject')
     site2 = models.ForeignKey(to='SiteObject', defaultPk=0)  # type: SiteObject
 
     credits_test = models.IntegerField()
     is_admin = models.BooleanField()
 
-    sites_list = models.List(to='tests.sample_model.SiteObject')  # Redis Lists
-    sites_set = models.Set(to='tests.sample_model.SiteObject')  # Redis Sets
+    sites_list = models.List(to='tests.sample_models.SiteObject')  # Redis Lists
+    sites_set = models.Set(to='tests.sample_models.SiteObject')  # Redis Sets
     sites_sorted_set = models.SortedSet(
-        to='tests.sample_model.SiteObject')  # Redis Sorted Sets
+        to='tests.sample_models.SiteObject')  # Redis Sorted Sets
 
 
 class ParentExample(models.Model):

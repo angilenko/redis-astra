@@ -4,7 +4,7 @@ import pytest
 import redis
 from astra import models
 from astra import signals
-from .sample_model import UserObject, SiteObject, ParentExample, ChildExample
+from .sample_models import UserObject, SiteObject, ParentExample, ChildExample
 
 PY_2 = sys.version_info[0] == 2
 if not PY_2:
@@ -709,3 +709,17 @@ class TestDeepAttributes(CommonHelper):
     def test_deep_attribute_with_default_model(self):
         user1 = UserObject(1, name='User1')
         assert user1.site2.some_child is None
+
+
+class TestAutoImport(CommonHelper):
+    def test_with_deferred_import(self):
+        """
+        Check case which SiteColorModel class is not loaded while
+        SiteObject initialized
+        """
+        site1 = SiteObject(1, name='example.com')
+
+        global db
+        from .other_models import SiteColorModel
+        SiteColorModel.database = db
+        assert isinstance(site1.site_color, SiteColorModel)

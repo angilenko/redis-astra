@@ -1,3 +1,8 @@
+v1.0.5 - 2017-02-08
+=================
+- Fix problem with import specified in "to" foreign models
+
+
 v1.0.4 - 2017-01-29
 =================
 - Allow use '0' or 0 as object's pk

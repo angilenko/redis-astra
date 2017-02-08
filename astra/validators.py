@@ -133,14 +133,16 @@ class ForeignObjectValidatorMixin(object):
             to_path = to.split('.')
             object_rel = to_path.pop()
             package_rel = '.'.join(to_path)
-            if package_rel not in sys.modules.keys():
+            if package_rel == '':
                 package_rel = self._model.__class__.__module__
             if package_rel not in sys.modules.keys():
-                raise AttributeError('Package "%s" is not loaded yet' % (to,))
+                __import__(package_rel)  # may throw ImportError
+
             try:
                 self._to = getattr(sys.modules[package_rel], object_rel)
             except AttributeError:
-                pass  # TODO
+                raise AttributeError('Package "%s" not contain model %s' %
+                                     (package_rel, object_rel))
 
     def _validate(self, value):
         if isinstance(value, bool):
