@@ -714,10 +714,9 @@ class TestDeepAttributes(CommonHelper):
 class TestAutoImport(CommonHelper):
     """
     Check case which SiteColorModel class is not loaded while SiteObject
-    initialized. Solution using importlib. Importlib available for Python 3.
+    initialized
     """
 
-    @pytest.mark.skipif(PY_2, reason="requires python3")
     def test_with_deferred_import(self):
         site1 = SiteObject(1, name='example.com')
 
