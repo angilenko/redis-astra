@@ -53,7 +53,7 @@ setup(
         'Programming Language :: Python :: 3.5',
         ],
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    install_requires=['redis>=2.9.1', 'PyDispatcher>=2.0.5', 'six>=1.10.0'],
+    install_requires=['redis>=2.9.1', 'six>=1.10.0'],
     extras_require={
         'dev': ['check-manifest'],
         'test': ['coverage', 'mock'],

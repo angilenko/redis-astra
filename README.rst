@@ -4,7 +4,10 @@
 redis-astra
 ==================
 
-Redis-astra is Python light ORM for Redis
+Redis-astra is Python light ORM for Redis.
+
+*Note*: version 2 has uncomportable changes with version 1. See `CHANGELOG.txt <https://github.com/pilat/redis-astra/blob/master/CHANGELOG.txt>`_
+
 
 Example:
 
@@ -16,16 +19,23 @@ Example:
     db = redis.StrictRedis(host='127.0.0.1', decode_responses=True)
 
     class SiteObject(models.Model):
-        database = db
+        def get_db(self):
+            return db
+        
         name = models.CharHash()
 
     class UserObject(models.Model):
-        database = db
+        def get_db(self):
+            return db
+        
         name = models.CharHash()
         login = models.CharHash()
-        site = models.ForeignKey(to='SiteObject')
-        sites_list = models.List(to='SiteObject')
+        site = models.ForeignKey(to=SiteObject)
+        sites_list = models.List(to=SiteObject)
         viewers = models.IntegerField()
+
+        def save(self, action, attr=None, value=None):            
+            print('\t * %s' % kwargs)
 
 
 So you can use it like this:
@@ -33,38 +43,29 @@ So you can use it like this:
 .. code:: python
 
     >>> user = UserObject(pk=1, name="Mike", viewers=5)
+    	* {'action': 'post_init', 'value': {'name': 'Mike', 'viewers': 5}}
     >>> user.login = 'mike@null.com'
+        * {'action': 'pre_assign', 'attr': 'login', 'value': 'mike@null.com'}
+	    * {'action': 'post_assign', 'attr': 'login', 'value': 'mike@null.com'}
     >>> user.login
     'mike@null.com'
     >>> user.viewers_incr(2)
     7
     >>> site = SiteObject(pk=1, name="redis.io")
     >>> user.site = site
+        * {'attr': 'site', 'action': 'm2m_link', 'value': <Model SiteObject(pk=1)>}
     >>> user.sites_list.lpush(site, site, site)
     3
     >>> len(user.sites_list)
     3
     >>> user.sites_list[2].name
     'redis.io'
+    >>> user.site = None
+	    * {'attr': 'site', 'action': 'm2m_remove'}
+    >>> user.remove()
+        * {'action': 'pre_remove', 'attr': 'pk', 'value': '1'}
+        * {'action': 'post_remove', 'attr': 'pk', 'value': '1'}
 
-
-Redis-astra supported signals, based on PyDispatcher:
-
-.. code:: python
-
-    from astra import signals
-
-    def save_handler(**kwargs):
-        print(kwargs)
-
-    signals.post_init.connect(save_handler)
-    signals.post_assign.connect(save_handler)
-
-    >>> user = UserObject(pk=1, name="Mike", viewers=5)
-    {'signal': 'post_init', 'instance': <Model UserObject(pk=1)>, 'sender': <class '__main__.UserObject'>}
-
-    >>> user.login = 'mike@null.com'
-    {'signal': 'post_assign', 'value': 'mike@null.com', 'instance': <Model UserObject(pk=1)>, 'attr': 'login', 'sender': <class '__main__.UserObject'>}
 
 
 Install

@@ -1,6 +1,3 @@
-from astra import signals
-
-
 # All model fields inherited from this
 from astra.validators import ForeignObjectValidatorMixin
 
@@ -27,8 +24,8 @@ class ModelField(object):
             prefix::user::hash::54
         """
         parent_class_name = self._model.__class__.__name__.lower()
-        items = [self._model.prefix, parent_class_name, self._field_type_name,
-                 str(self._model.pk)]
+        items = [self._model._astra_prefix, parent_class_name,
+                 self._field_type_name, str(self._model.pk)]
         if not is_hash:
             items.append(self._name)
         return '::'.join(items)
@@ -43,7 +40,7 @@ class ModelField(object):
         if method_name not in self._directly_redis_helpers:
             raise AttributeError('Invalid attribute with name "%s"'
                                  % (method_name,))
-        original_command = getattr(self._model.database, method_name)
+        original_command = getattr(self._model._astra_get_db(), method_name)
         current_key = self._get_key_name()
 
         def _method_wrapper(*args, **kwargs):
@@ -55,7 +52,7 @@ class ModelField(object):
         return _method_wrapper
 
     def _remove(self):
-        self._model.database.delete(self._get_key_name())
+        self._model._astra_get_db().delete(self._get_key_name())
 
 
 # Fields:
@@ -67,19 +64,17 @@ class BaseField(ModelField):
             raise ValueError("You're cannot save None value for %s"
                              % (self._name,))
 
-        not suppress_signal and signals.pre_assign.send(
-            sender=self._model.__class__, instance=self._model,
-            attr=self._name, value=value)
+        not suppress_signal and self._model.save(
+            action='pre_assign', attr=self._name, value=value)
 
         saved_value = self._validate(value)
-        self._model.database.set(self._get_key_name(), saved_value)
+        self._model._astra_get_db().set(self._get_key_name(), saved_value)
 
-        not suppress_signal and signals.post_assign.send(
-            sender=self._model.__class__, instance=self._model,
-            attr=self._name, value=value)
+        not suppress_signal and self._model.save(
+            action='post_assign', attr=self._name, value=value)
 
     def _obtain(self):
-        value = self._model.database.get(self._get_key_name())
+        value = self._model._astra_get_db().get(self._get_key_name())
         return self._convert(value)
 
     def _validate(self, value):
@@ -100,33 +95,35 @@ class BaseHash(ModelField):
             raise ValueError("You're cannot save None value for %s"
                              % (self._name,))
 
-        not suppress_signal and signals.pre_assign.send(
-            sender=self._model.__class__, instance=self._model,
-            attr=self._name, value=value)
+        not suppress_signal and self._model.save(
+            action='pre_assign', attr=self._name, value=value)
 
         saved_value = self._validate(value)
-        self._model.database.hset(self._get_key_name(True),
-                                  self._name, saved_value)
-        if self._model._hash_loaded:
-            self._model._hash[self._name] = saved_value
+        self._model._astra_get_db().hset(self._get_key_name(True),
+                                         self._name, saved_value)
+        if self._model._astra_hash_loaded:
+            self._model._astra_hash[self._name] = saved_value
+        self._model._astra_hash_exist = True
 
-        not suppress_signal and signals.post_assign.send(
-            sender=self._model.__class__, instance=self._model,
-            attr=self._name, value=value)
+        not suppress_signal and self._model.save(
+            action='post_assign', attr=self._name, value=value)
 
     def _obtain(self):
         self._load_hash()
-        return self._convert(self._model._hash.get(self._name, None))
+        return self._convert(self._model._astra_hash.get(self._name, None))
 
     def _load_hash(self):
-        if self._model._hash_loaded:
+        if self._model._astra_hash_loaded:
             return
-        self._model._hash_loaded = True
-        self._model._hash = \
-            self._model.database.hgetall(
+        self._model._astra_hash_loaded = True
+        self._model._astra_hash = \
+            self._model._astra_get_db().hgetall(
                 self._get_key_name(True))
-        if not self._model._hash:  # None if hash field is not exist
-            self._model._hash = {}
+        if not self._model._astra_hash:  # None if hash field is not exist
+            self._model._astra_hash = {}
+            self._model._astra_hash_exist = False
+        else:
+            self._model._astra_hash_exist = True
 
     def _validate(self, value):
         """ Check saved value before send to server """
@@ -137,8 +134,9 @@ class BaseHash(ModelField):
         raise NotImplementedError('Subclasses must implement _convert')
 
     def _remove(self):
-        # self._model.database.delete(self._get_key_name(True))
-        self._model.database.hdel(self._get_key_name(True), self._name)
+        # Delete one record on hash. _astra_hash_exist is not changes
+        # eg hash may be exist
+        self._model._astra_get_db().hdel(self._get_key_name(True), self._name)
 
 
 # Implements for three types of lists
@@ -163,7 +161,7 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
         if item not in self._allowed_redis_methods:
             return super(BaseCollection, self).__getattribute__(item)
 
-        original_command = getattr(self._model.database, item)
+        original_command = getattr(self._model._astra_get_db(), item)
         current_key = self._get_key_name()
 
         def _method_wrapper(*args, **kwargs):

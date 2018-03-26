@@ -1,7 +1,6 @@
-import redis
+from abc import abstractmethod
 
 from astra import fields
-from astra import signals
 from astra import validators
 
 
@@ -9,20 +8,21 @@ class Model(object):
     """
     Parent class for all user-objects to be managed
     class Stream(models.Model):
-        database = strict_redis_instance(..)
         name = models.CharHash(max_length=128)
         ...
+
+        def get_db(self):
+            return strict_redis_instance(..)
     """
 
-    prefix = 'astra'
-
     def __init__(self, pk=None, **kwargs):
-        self._fields = dict()
-        self._helpers = set()
-        self._hash = {}  # Hash-object cache
-        self._hash_loaded = False
-        self._fields_loaded = False
-        assert isinstance(self.database, redis.StrictRedis)
+        self._astra_fields = dict()
+        self._astra_hash = {}  # Hash-object cache
+        self._astra_hash_loaded = False
+        self._astra_fields_loaded = False
+        self._astra_database = None
+        self._astra_prefix = 'astra'
+        self._astra_hash_exist = None
 
         if pk is None:
             raise ValueError('You\'re must pass pk for object')
@@ -33,48 +33,60 @@ class Model(object):
         # immediate. When object initialized as user2 = UserObject(1), then
         # information from database not obtain before first data handling
         if kwargs:
-            self._load_fields(**kwargs)
+            self._astra_load_fields(**kwargs)
 
-    def _load_fields(self, **kwargs):
-        self._fields_loaded = True
+    @abstractmethod
+    def get_db(self):
+        pass
+
+    @abstractmethod
+    def save(self, action, attr=None, value=None):
+        pass
+
+    def _astra_get_db(self):
+        if not self._astra_database:
+            self._astra_database = self.get_db()
+        return self._astra_database
+
+    def _astra_load_fields(self, **kwargs):
+        self._astra_fields_loaded = True
 
         for k in dir(self.__class__):  # vars() ignores parent variables
             v = getattr(self.__class__, k)
             if isinstance(v, fields.ModelField):
                 new_instance_of_field = v.__class__(instance=True, model=self,
                                                     name=k, **v._options)
-                self._fields[k] = new_instance_of_field
+                self._astra_fields[k] = new_instance_of_field
 
         # Assign kwargs values when object will be initialized
-        keys = [k for k in kwargs.keys() if k in self._fields.keys()]
+        keys = [k for k in kwargs.keys() if k in self._astra_fields.keys()]
+        initial_data = {}
         for k in keys:
-            self._fields[k]._assign(kwargs.get(k), suppress_signal=True)
-        keys and signals.post_init.send(sender=self.__class__, instance=self)
+            initial_data[k] = kwargs.get(k)
+            self._astra_fields[k]._assign(kwargs.get(k), suppress_signal=True)
+        keys and self.save(action='post_init', value=initial_data)
 
     def __setattr__(self, key, value):
-        if key in ('_fields', '_helpers', '_hash', '_hash_loaded', 'pk',
-                   '_fields_loaded'):
+        if key.startswith('_astra_') or key == 'pk':
             return super(Model, self).__setattr__(key, value)
 
-        if key in self._fields.keys():
-            field = self._fields[key]  # self.__class__.__dict__.get(key)
+        if key in self._astra_fields.keys():
+            field = self._astra_fields[key]  # self.__class__.__dict__.get(key)
             field._assign(value)
         else:
             return super(Model, self).__setattr__(key, value)
 
     def __getattribute__(self, key):
-        # When someone request _fields, then start lazy loading...
-        if key == '_fields' and not self._fields_loaded:
-            self._load_fields()
+        # When someone request _astra_fields, then start lazy loading...
+        if key == '_astra_fields' and not self._astra_fields_loaded:
+            self._astra_load_fields()
 
         # Keys + some internal methods
-        internal_keys = ('_fields', 'database', '__class__', 'prefix',
-                         '_hash_loaded', '_fields_loaded', '_load_fields')
-        if key in internal_keys:
+        if key.startswith('_astra_') or key == '__class__':
             return object.__getattribute__(self, key)
 
-        if key in self._fields:
-            field = self._fields[key]
+        if key in self._astra_fields:
+            field = self._astra_fields[key]
             return field._obtain()
 
         # If key is not in the fields, we're attempt call helper
@@ -82,15 +94,15 @@ class Model(object):
         key_elements = key.split('_', )
         method_name = key_elements.pop()
         field_name = '_'.join(key_elements)
-        if field_name in self._fields:
-            field = self._fields[field_name]
+        if field_name in self._astra_fields:
+            field = self._astra_fields[field_name]
             return field._helper(method_name)
 
         # Otherwise, default behavior:
         return object.__getattribute__(self, key)
 
     def __dir__(self):  # TODO: Check it
-        return self._fields
+        return self._astra_fields
 
     def __eq__(self, other):
         """
@@ -105,18 +117,28 @@ class Model(object):
         return '<Model %s(pk=%s)>' % (self.__class__.__name__, self.pk)
 
     def remove(self):
-        signals.pre_remove.send(sender=self.__class__, instance=self)
+        self.save(action='pre_remove', attr='pk', value=self.pk)
 
         # Remove all fields and one time delete entire hash
         is_hash_deleted = False
-        for field in self._fields.values():
+        for field in self._astra_fields.values():
             if isinstance(field, fields.BaseHash):
                 if not is_hash_deleted:
                     is_hash_deleted = True
-                    self.database.delete(field._get_key_name(True))
+                    self._astra_get_db().delete(field._get_key_name(True))
             else:
                 field._remove()
-        signals.post_remove.send(sender=self.__class__)
+        self._astra_hash_exist = False
+        self.save(action='post_remove', attr='pk', value=self.pk)
+
+    def hash_exist(self):
+        if self._astra_hash_exist is None:
+            parent_class_name = self.__class__.__name__.lower()
+            items = [self._astra_prefix, parent_class_name,
+                     'hash', str(self.pk)]
+            hash_key = '::'.join(items)
+            self._astra_hash_exist = self._astra_get_db().exists(hash_key)
+        return self._astra_hash_exist
 
 
 class CharField(validators.CharValidatorMixin, fields.BaseField):
@@ -140,19 +162,16 @@ class ForeignKey(validators.ForeignObjectValidatorMixin, fields.BaseField):
         Support remove hash field if None passed as value
         """
         if isinstance(value, Model):
-            super(ForeignKey, self)._assign(value.pk)
-            signal = dict(sender=self._model.__class__, instance=self._model,
-                          attr=self._name, action='link', value=value)
+            super(ForeignKey, self)._assign(value.pk, True)
+            signal = dict(attr=self._name, action='m2m_link', value=value)
         elif value is None:
-            self._model.database.delete(self._get_key_name())
-            signal = dict(sender=self._model.__class__, instance=self._model,
-                          attr=self._name, action='delete', value=None)
+            self._model._astra_get_db().delete(self._get_key_name())
+            signal = dict(attr=self._name, action='m2m_remove')
         else:
-            super(ForeignKey, self)._assign(value)
-            signal = dict(sender=self._model.__class__, instance=self._model,
-                          attr=self._name, action='link', value=value)
+            super(ForeignKey, self)._assign(value, True)
+            signal = dict(attr=self._name, action='m2m_link', value=value)
 
-        not suppress_signal and signals.m2m_changed.send(**signal)
+        not suppress_signal and self._model.save(**signal)
 
     def _obtain(self):
         """

@@ -1,7 +1,5 @@
 import datetime as dt
-import sys
-
-from six import string_types, integer_types
+from six import string_types, integer_types, PY2
 
 
 # Validation rules common between hash and fields
@@ -121,38 +119,30 @@ class ForeignObjectValidatorMixin(object):
         if to is None:
             return
 
-        if 'instance' not in kwargs:
-            # First check
-            from astra import models
-            if not isinstance(to, string_types) \
-                    and not isinstance(to, models.Model):
-                raise AttributeError('You\'re must define to as string'
-                                     ' or Model class')
-        else:
+        if 'instance' in kwargs:
             # Replace _to method to foreign constructor
-            to_path = to.split('.')
-            object_rel = to_path.pop()
-            package_rel = '.'.join(to_path)
-            if package_rel == '':
-                package_rel = self._model.__class__.__module__
-            if package_rel not in sys.modules.keys():
-                if sys.version_info[0] < 3:
+            if isinstance(to, string_types):
+                import sys
+                to_path = to.split('.')
+                object_rel = to_path.pop()
+                package_rel = '.'.join(to_path)                
+
+                if PY2:
                     import imp as _imp
                 else:
                     import _imp
 
                 _imp.acquire_lock()
-                cls_names = []
-                for o in package_rel.split('.'):
-                    cls_names.append(o)
-                    __import__('.'.join(cls_names))
+                module1 = __import__('.'.join(to_path))
                 _imp.release_lock()
-
-            try:
-                self._to = getattr(sys.modules[package_rel], object_rel)
-            except AttributeError:
-                raise AttributeError('Package "%s" not contain model %s' %
-                                     (package_rel, object_rel))
+                
+                try:
+                    self._to = getattr(sys.modules[package_rel], object_rel)
+                except AttributeError:
+                    raise AttributeError('Package "%s" not contain model %s' %
+                                         (package_rel, object_rel))
+            else:
+                self._to = to
 
     def _validate(self, value):
         if isinstance(value, bool):

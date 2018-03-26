@@ -1,0 +1,18 @@
+{
+    "python.pythonPath": "~/venv/redis-astra/bin/python",    
+    "files.exclude": {
+        "**/*.pyc": true,
+        "**/__pycache__": true,
+        ".pytest_cache": true
+    },
+    "editor.rulers": [
+        79
+    ],
+    "python.formatting.autopep8Args": [
+        "--ignore=E501"
+    ],
+    "python.unitTest.nosetestPath": "tests",
+    // "python.unitTest.pyTestEnabled": true,
+    "python.unitTest.nosetestsEnabled": true,
+    "python.unitTest.unittestEnabled": true
+}

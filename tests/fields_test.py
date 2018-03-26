@@ -2,19 +2,20 @@ import datetime as dt
 import sys
 import pytest
 import redis
+from six import PY2
 from astra import models
-from astra import signals
+
 from .sample_models import UserObject, SiteObject, ParentExample, ChildExample
 
-PY_2 = sys.version_info[0] == 2
-if not PY_2:
-    from unittest.mock import MagicMock, call
+
+if not PY2:
+    from unittest.mock import MagicMock, call, patch
 
 
 # Patch redis. Connection method for collect command sequences for this test
 def patched_send_command(self, *args):
     if 'commands' in globals():
-        commands.append(args)  # commands.append(' '.join(args))
+        commands.append(args)
     self.send_packed_command(self.pack_command(*args))
 
 
@@ -26,11 +27,17 @@ class CommonHelper:
     def setup(self):
         global db, commands
         db = redis.StrictRedis(host='127.0.0.1', decode_responses=True)
-        UserObject.database = db
-        SiteObject.database = db
-        ParentExample.database = db
+
+        UserObject.get_db = self._get_db
+        SiteObject.get_db = self._get_db
+        ParentExample.get_db = self._get_db
+
         db.flushall()
         commands = []
+
+    def _get_db(self):
+        global db
+        return db
 
     def setup_method(self, test_method):
         pass
@@ -54,6 +61,12 @@ class CommonHelper:
 
 # Test of base fields behavior
 class TestModelField(CommonHelper):
+    def test_primary_key_is_string_always(self):
+        user = UserObject(1)
+        user.name = 'Username'
+        user2 = UserObject('1')
+        assert user2.name == 'Username'
+
     def test_set_and_read_attrs(self):
         user1 = UserObject(1)
         user1.name = 'Username'
@@ -90,7 +103,7 @@ class TestModelField(CommonHelper):
         user1 = UserObject('2')
         assert isinstance(user1.pk, str)
 
-    @pytest.mark.skipif(PY_2, reason="requires python3")
+    @pytest.mark.skipif(PY2, reason="requires python3")
     def test_redis_pass_arg_directly(self):
         db.hset = MagicMock()
         user1 = UserObject(1)
@@ -98,14 +111,6 @@ class TestModelField(CommonHelper):
         # redis independently convert key to string
         db.hset.assert_called_once_with('astra::userobject::hash::1',
                                         'login', 1234)
-
-    @pytest.mark.skipif(PY_2, reason="requires python3")
-    def test_custom_prefix_for_redis_model(self):
-        db.hset = MagicMock()
-        site1 = SiteObject(5)
-        site1.name = 'Site1'
-        db.hset.assert_called_once_with(
-            'custom_prefix::siteobject::hash::5', 'name', 'Site1')
 
     def test_success_saved(self):
         user_write = UserObject(1)
@@ -117,16 +122,12 @@ class TestModelField(CommonHelper):
         assert user_read.login == 'user@null.com'
         self.assert_commands_count(3)
 
-    @pytest.mark.skipif(PY_2, reason="requires python3")
+    @pytest.mark.skipif(PY2, reason="requires python3")
     def test_read_real_value(self):
         db.hgetall = MagicMock(return_value={'name': 'Username'})
         user1 = UserObject(1)
         assert user1.name == 'Username'
         assert user1.login == ''
-
-        # About Mock: https://docs.python.org/dev/library/unittest.mock.html
-        # db.execute_command = MagicMock(return_value=3)
-        # db.execute_command.assert_has_calls(1)
 
     def test_value_after_save(self):
         user_write = UserObject(1)
@@ -274,7 +275,7 @@ class TestHashDelete(CommonHelper):
             rating = models.IntegerHash()
             field1 = models.CharField()
 
-        SampleObject1.database = db
+        SampleObject1.get_db = self._get_db
         test_object = SampleObject1(1, name='Alice', rating=22, field1='test')
         self.assert_commands_count(3)  # two times set hash + field
         test_object.remove()
@@ -282,7 +283,7 @@ class TestHashDelete(CommonHelper):
 
 
 class TestLinkField(CommonHelper):
-    def test_save_valid_value_as_int(self):
+    def test_save_foreign_link_as_object(self):
         site1 = SiteObject(1, name='redis.io')
         UserObject(1, name='Username', site_id=site1)
 
@@ -290,6 +291,16 @@ class TestLinkField(CommonHelper):
         assert user_reader1.site_id.pk == '1'
         assert isinstance(user_reader1.site_id, SiteObject)
 
+    def test_save_foreign_link_as_string(self):
+        site2 = SiteObject(2)
+        site2.name='redis.io'
+
+        UserObject(1, name='Username', site_id='2')
+
+        user_reader1 = UserObject(1)
+        assert user_reader1.site_id.pk == '2'
+        assert user_reader1.site_id.name == 'redis.io'
+        assert isinstance(user_reader1.site_id, SiteObject)
 
 class TestIntegerField(CommonHelper):
     def test_save_not_integer_value(self):
@@ -608,88 +619,50 @@ class TestParentInheritance(CommonHelper):
 
 
 class TestSignalsFeature(CommonHelper):
-    def test_base_signal(self):
-        signals.pre_assign.connect(self.simple_mock)
-        user1 = UserObject(1)
-        user1.name = 'User1'
-        assert self.mock_calls == 1
-
-    @pytest.mark.skipif(PY_2, reason="requires python3")
-    def test_dispatched_params(self):
-        handler = MagicMock()
-        signals.pre_assign.connect(handler)
-        user1 = UserObject(1)
-        user1.name = 'User1'
-        handler.assert_called_with(value='User1', attr='name',
-                                   sender=UserObject, signal='pre_assign',
-                                   instance=user1)
-
-    @pytest.mark.skipif(PY_2, reason="requires python3")
-    def test_signal_filtering(self):
-        handle_any_assign = MagicMock()
-        signals.pre_assign.connect(handle_any_assign)
-
-        handle_site_assign = MagicMock()
-        signals.pre_assign.connect(handle_site_assign, SiteObject)
-
-        user1 = UserObject(1)
-        user1.name = 'User1'
-        site1 = SiteObject(1)
-        site1.name = 'example.com'
-
-        assert handle_any_assign.call_count == 2
-        assert handle_site_assign.call_count == 1
-
-    @pytest.mark.skipif(PY_2, reason="requires python3")
-    def test_signal_disconnecting(self):
-        handle1 = MagicMock()
-        handle2 = MagicMock()
-        signals.post_assign.connect(handle1)
-        signals.post_assign.connect(handle2)
-
-        user1 = UserObject(1)
-        user1.name = 'User1'
-
-        assert handle1.call_count == 1
-        assert handle2.call_count == 1
-
-        signals.post_assign.disconnect(handle2)
-
-        user1.name = 'User1 change name'
-        assert handle1.call_count == 2
-        assert handle2.call_count == 1
-
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_init_signal(self):
+        with patch.object(UserObject, 'save', return_value=None) as mock_model:
+            user1 = UserObject(pk=1, name='Mike', rating=5)
+        mock_model.assert_called_once_with(action='post_init', 
+            value={'name': 'Mike', 'rating': 5})
+    
+    @pytest.mark.skipif(PY2, reason="requires python3")
     def test_assign_signals(self):
-        signals.post_init.connect(self.simple_mock)
-        UserObject(1, name='User1')
-        assert self.mock_calls == 1
+        with patch.object(UserObject, 'save', return_value=None) as mock_model:
+            user1 = UserObject(1)
+            user1.name = 'User1'
+        mock_model.assert_has_calls([
+            call(action='pre_assign', attr='name', value='User1'),
+            call(action='post_assign', attr='name', value='User1')
+        ], any_order=True)
+    
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_m2m_link_signal(self):
+        site = SiteObject(pk=1, name="redis.io")
+        with patch.object(UserObject, 'save', return_value=None) as mock_model:
+            user1 = UserObject(1)
+            user1.site_id = site
+        mock_model.assert_called_once_with(action='m2m_link', attr='site_id',
+            value=site)
 
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_m2m_remove_signal(self):
+        site = SiteObject(pk=1, name="redis.io")
+        user1 = UserObject(1)
+        user1.site_id = site
+        with patch.object(UserObject, 'save', return_value=None) as mock_model:
+            user1.site_id = None
+        mock_model.assert_called_once_with(action='m2m_remove', attr='site_id')
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
     def test_remove_signals(self):
-        signals.pre_remove.connect(self.simple_mock)
-        signals.post_remove.connect(self.simple_mock)
-        user1 = UserObject(1, name='User1')
-        user1.remove()
-        assert self.mock_calls == 2
-
-    @pytest.mark.skipif(PY_2, reason="requires python3")
-    def test_foreign_keys_signals(self):
-        handler = MagicMock()
-        signals.m2m_changed.connect(handler, UserObject)
-        user1 = UserObject(1, name='User1')
-        site1 = SiteObject(1, name='example.com')
-        user1.site_id = site1
-        user1.site_id = 1
-        user1.site_id = None
-
-        calls = [
-            call(action='link', attr='site_id', instance=user1, value=site1,
-                 sender=UserObject, signal='m2m_changed'),
-            call(action='link', attr='site_id', instance=user1, value=1,
-                 sender=UserObject, signal='m2m_changed'),
-            call(action='delete', attr='site_id', instance=user1, value=None,
-                 sender=UserObject, signal='m2m_changed')
-        ]
-        handler.assert_has_calls(calls)
+        user1 = UserObject(pk=1, name='Mike', rating=5)
+        with patch.object(UserObject, 'save', return_value=None) as mock_model:
+            user1.remove()
+        mock_model.assert_has_calls([
+            call(action='pre_remove', attr='pk', value='1'),
+            call(action='post_remove', attr='pk', value='1')
+        ], any_order=True)
 
 
 class TestDeepAttributes(CommonHelper):
@@ -720,7 +693,7 @@ class TestAutoImport(CommonHelper):
     def test_with_deferred_import(self):
         site1 = SiteObject(1, name='example.com')
 
-        global db
         from .other_models import SiteColorModel
-        SiteColorModel.database = db
+
+        SiteColorModel.get_db = self._get_db
         assert isinstance(site1.site_color, SiteColorModel)

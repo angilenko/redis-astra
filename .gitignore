@@ -3,10 +3,12 @@ redis-astra.egg-info
 build/
 dist/
 dump.rdb
-vagrant/.vagrant
 .idea
 .eggs/
 .cache/
 *.egg-info/
 example.py
 test.sh
+.pytest_cache/
+.noseids
+_build/

@@ -1,3 +1,13 @@
+v2.0.0 - 2018-03-27 - beta
+=================
+- Remove signals support. Support "save" method in model instead (See example 
+  in README)
+- Remove "database" field in model. Use method get_db() for return 
+  redis.StrictRedis instance
+- Remove "prefix" attribute
+- Keys are always convert to string
+
+
 v1.0.7 - 2017-02-08
 =================
 - Auto import foreign models
