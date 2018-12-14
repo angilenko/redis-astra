@@ -64,11 +64,10 @@ class BaseField(ModelField):
 
     def _assign(self, value):
         self._run_validators(value)
-        self._model.save(action='pre_assign', attr=self._name, value=value)
-
         saved_value = self._convert_set(value)
-        self._model._astra_get_db().set(self._get_key_name(), saved_value)
 
+        self._model.save(action='pre_assign', attr=self._name, value=value)
+        self._model._astra_get_db().set(self._get_key_name(), saved_value)
         self._model.save(action='post_assign', attr=self._name, value=value)
 
     def _obtain(self):
@@ -90,12 +89,11 @@ class BaseHash(ModelField):
 
     def _assign(self, value):
         self._run_validators(value)
-        self._model.save(action='pre_assign', attr=self._name, value=value)
-
         saved_value = self._convert_set(value)
+
+        self._model.save(action='pre_assign', attr=self._name, value=value)
         self._model._astra_get_db().hset(self._get_key_name(True),
                                          self._name, saved_value)
-
         if self._model._astra_hash_loaded:
             self._model._astra_hash[self._name] = saved_value
         self._model._astra_hash_exist = True
