@@ -59,8 +59,7 @@ class Model(object):
         initial_data = {}
         for k in keys:
             initial_data[k] = kwargs.get(k)
-            self._astra_fields[k]._assign(kwargs.get(k), suppress_signal=True)
-        keys and self.save(action='post_init', value=initial_data)
+            self._astra_fields[k]._assign(kwargs.get(k))
 
     def __setattr__(self, key, value):
         if key.startswith('_astra_') or key == 'pk':
@@ -153,21 +152,21 @@ class IntegerField(validators.IntegerValidatorMixin, fields.BaseField):
 
 
 class ForeignKey(validators.ForeignObjectValidatorMixin, fields.BaseField):
-    def _assign(self, value, suppress_signal=False):
+    def _assign(self, value):
         """
         Support remove hash field if None passed as value
         """
         if isinstance(value, Model):
-            super(ForeignKey, self)._assign(value.pk, True)
+            super(ForeignKey, self)._assign(value.pk)
             signal = dict(attr=self._name, action='m2m_link', value=value)
         elif value is None:
             self._model._astra_get_db().delete(self._get_key_name())
             signal = dict(attr=self._name, action='m2m_remove')
         else:
-            super(ForeignKey, self)._assign(value, True)
+            super(ForeignKey, self)._assign(value)
             signal = dict(attr=self._name, action='m2m_link', value=value)
 
-        not suppress_signal and self._model.save(**signal)
+        self._model.save(**signal)
 
     def _obtain(self):
         """

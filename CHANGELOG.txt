@@ -4,6 +4,8 @@
 - Fix CharField and CharHash: only strings are accept
 - Fix IntegerField and IntegerHash: only numbers are accept
 - validator feature for fields
+- post_init hook was removed
+- pre_assign and post_assign behavior were changed
 
 
 v2.0.0 - 2018-03-27 - beta

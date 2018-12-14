@@ -3,8 +3,6 @@ from astra.validators import ForeignObjectValidatorMixin
 
 
 class ModelField(object):
-    # _model = None  # type: Model
-    # _name = None  # type: str
     _directly_redis_helpers = ()  # Direct method helpers
     _field_type_name = '--'
 
@@ -30,7 +28,7 @@ class ModelField(object):
             items.append(self._name)
         return '::'.join(items)
 
-    def _assign(self, value, suppress_signal=False):
+    def _assign(self, value):
         raise NotImplementedError('Subclasses must implement _assign')
 
     def _obtain(self):
@@ -64,20 +62,14 @@ class ModelField(object):
 class BaseField(ModelField):
     _field_type_name = 'fld'
 
-    def _assign(self, value, suppress_signal=False):
-        if value is None:
-            raise ValueError("You're cannot save None value for %s"
-                             % (self._name,))
-
-        not suppress_signal and self._model.save(
-            action='pre_assign', attr=self._name, value=value)
+    def _assign(self, value):
+        self._run_validators(value)
+        self._model.save(action='pre_assign', attr=self._name, value=value)
 
         saved_value = self._convert_set(value)
-        self._run_validators(value)
         self._model._astra_get_db().set(self._get_key_name(), saved_value)
 
-        not suppress_signal and self._model.save(
-            action='post_assign', attr=self._name, value=value)
+        self._model.save(action='post_assign', attr=self._name, value=value)
 
     def _obtain(self):
         value = self._model._astra_get_db().get(self._get_key_name())
@@ -96,24 +88,18 @@ class BaseField(ModelField):
 class BaseHash(ModelField):
     _field_type_name = 'hash'
 
-    def _assign(self, value, suppress_signal=False):
-        if value is None:
-            raise ValueError("You're cannot save None value for %s"
-                             % (self._name,))
-
-        not suppress_signal and self._model.save(
-            action='pre_assign', attr=self._name, value=value)
+    def _assign(self, value):
+        self._run_validators(value)
+        self._model.save(action='pre_assign', attr=self._name, value=value)
 
         saved_value = self._convert_set(value)
-        self._run_validators(value)
         self._model._astra_get_db().hset(self._get_key_name(True),
                                          self._name, saved_value)
+
         if self._model._astra_hash_loaded:
             self._model._astra_hash[self._name] = saved_value
         self._model._astra_hash_exist = True
-
-        not suppress_signal and self._model.save(
-            action='post_assign', attr=self._name, value=value)
+        self._model.save(action='post_assign', attr=self._name, value=value)
 
     def _obtain(self):
         self._load_hash()
@@ -157,7 +143,7 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
     def _obtain(self):
         return self  # for delegate to __getattr__ on this class
 
-    def _assign(self, value, suppress_signal=False):
+    def _assign(self, value):
         if value is None:
             self._remove()
         else:

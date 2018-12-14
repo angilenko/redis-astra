@@ -643,30 +643,25 @@ class TestParentInheritance(CommonHelper):
 
 class TestSignalsFeature(CommonHelper):
     @pytest.mark.skipif(PY2, reason="requires python3")
-    def test_init_signal(self):
-        with patch.object(UserObject, 'save', return_value=None) as mock_model:
-            user1 = UserObject(pk=1, name='Mike', rating=5)
-        mock_model.assert_called_once_with(action='post_init', 
-            value={'name': 'Mike', 'rating': 5})
-    
-    @pytest.mark.skipif(PY2, reason="requires python3")
     def test_assign_signals(self):
         with patch.object(UserObject, 'save', return_value=None) as mock_model:
-            user1 = UserObject(1)
-            user1.name = 'User1'
+            user1 = UserObject(1, name='User1')
+            user1.rating = 5
         mock_model.assert_has_calls([
             call(action='pre_assign', attr='name', value='User1'),
-            call(action='post_assign', attr='name', value='User1')
+            call(action='post_assign', attr='name', value='User1'),
+            call(action='pre_assign', attr='rating', value=5),
+            call(action='post_assign', attr='rating', value=5),
         ], any_order=True)
-    
+
     @pytest.mark.skipif(PY2, reason="requires python3")
     def test_m2m_link_signal(self):
         site = SiteObject(pk=1, name="redis.io")
         with patch.object(UserObject, 'save', return_value=None) as mock_model:
             user1 = UserObject(1)
             user1.site1 = site
-        mock_model.assert_called_once_with(action='m2m_link', attr='site1',
-            value=site)
+        mock_model.assert_called_with(action='m2m_link', attr='site1',
+                                      value=site)
 
     @pytest.mark.skipif(PY2, reason="requires python3")
     def test_m2m_remove_signal(self):

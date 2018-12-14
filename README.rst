@@ -34,7 +34,7 @@ Example:
         sites_list = models.List(to=SiteObject)
         viewers = models.IntegerField()
 
-        def save(self, action, attr=None, value=None):            
+        def save(self, action, attr=None, value=None):
             print('\t * %s' % kwargs)
 
 
@@ -43,7 +43,10 @@ So you can use it like this:
 .. code:: python
 
     >>> user = UserObject(pk=1, name="Mike", viewers=5)
-    	* {'action': 'post_init', 'value': {'name': 'Mike', 'viewers': 5}}
+    	* {'action': 'pre_assign', 'attr': 'name', 'value': 'Mike'}
+	    * {'action': 'post_assign', 'attr': 'name', 'value': 'Mike'}
+        * {'action': 'pre_assign', 'attr': 'viewers', 'value': 5}
+	    * {'action': 'post_assign', 'attr': 'viewers', 'value': 5}
     >>> user.login = 'mike@null.com'
         * {'action': 'pre_assign', 'attr': 'login', 'value': 'mike@null.com'}
 	    * {'action': 'post_assign', 'attr': 'login', 'value': 'mike@null.com'}
