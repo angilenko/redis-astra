@@ -54,6 +54,11 @@ class ModelField(object):
     def _remove(self):
         self._model._astra_get_db().delete(self._get_key_name())
 
+    def _run_validators(self, value):
+        if 'validators' in self._options:
+            for validator in self._options['validators']:
+                validator(value)
+
 
 # Fields:
 class BaseField(ModelField):
@@ -67,7 +72,8 @@ class BaseField(ModelField):
         not suppress_signal and self._model.save(
             action='pre_assign', attr=self._name, value=value)
 
-        saved_value = self._validate(value)
+        saved_value = self._convert_set(value)
+        self._run_validators(value)
         self._model._astra_get_db().set(self._get_key_name(), saved_value)
 
         not suppress_signal and self._model.save(
@@ -75,15 +81,15 @@ class BaseField(ModelField):
 
     def _obtain(self):
         value = self._model._astra_get_db().get(self._get_key_name())
-        return self._convert(value)
+        return self._convert_get(value)
 
-    def _validate(self, value):
+    def _convert_set(self, value):
         """ Check saved value before send to server """
-        raise NotImplementedError('Subclasses must implement _validate')
+        raise NotImplementedError('Subclasses must implement _convert_set')
 
-    def _convert(self, value):
+    def _convert_get(self, value):
         """ Convert server answer to user type """
-        raise NotImplementedError('Subclasses must implement _convert')
+        raise NotImplementedError('Subclasses must implement _convert_get')
 
 
 # Hashes
@@ -98,7 +104,8 @@ class BaseHash(ModelField):
         not suppress_signal and self._model.save(
             action='pre_assign', attr=self._name, value=value)
 
-        saved_value = self._validate(value)
+        saved_value = self._convert_set(value)
+        self._run_validators(value)
         self._model._astra_get_db().hset(self._get_key_name(True),
                                          self._name, saved_value)
         if self._model._astra_hash_loaded:
@@ -110,7 +117,7 @@ class BaseHash(ModelField):
 
     def _obtain(self):
         self._load_hash()
-        return self._convert(self._model._astra_hash.get(self._name, None))
+        return self._convert_get(self._model._astra_hash.get(self._name, None))
 
     def _load_hash(self):
         if self._model._astra_hash_loaded:
@@ -125,13 +132,13 @@ class BaseHash(ModelField):
         else:
             self._model._astra_hash_exist = True
 
-    def _validate(self, value):
+    def _convert_set(self, value):
         """ Check saved value before send to server """
-        raise NotImplementedError('Subclasses must implement _validate')
+        raise NotImplementedError('Subclasses must implement _convert_set')
 
-    def _convert(self, value):
+    def _convert_get(self, value):
         """ Convert server answer to user type """
-        raise NotImplementedError('Subclasses must implement _convert')
+        raise NotImplementedError('Subclasses must implement _convert_get')
 
     def _remove(self):
         # Delete one record on hash. _astra_hash_exist is not changes

@@ -4,39 +4,34 @@ from six import string_types, integer_types, PY2
 
 # Validation rules common between hash and fields
 class CharValidatorMixin(object):
-    def _validate(self, value):
-        if isinstance(value, bool):  # otherwise we've got "False" as value
-            raise ValueError('Invalid type of field %s: %s.' %
-                             (self._name, type(value).__name__))
+    def _convert_set(self, value):
+        if not isinstance(value, string_types):
+            raise ValueError('Invalid field type. Expected string type.')
         return value
 
-    def _convert(self, value):
-        return value if value is not None else ''
+    def _convert_get(self, value):
+        return value or ''
 
 
 class BooleanValidatorMixin(object):
-    def _validate(self, value):
+    def _convert_set(self, value):
         if not isinstance(value, bool):
-            raise ValueError('Invalid type of field %s: %s. Expected is bool' %
-                             (self._name, type(value).__name__))
+            raise ValueError('Invalid field type. Expected boolean type.')
         return '1' if bool(value) else '0'
 
-    def _convert(self, value):
+    def _convert_get(self, value):
         return True if value == '1' else False
 
 
 class IntegerValidatorMixin(object):
-    def _validate(self, value):
+    def _convert_set(self, value):
         if not isinstance(value, integer_types):
-            raise ValueError('Invalid type of field %s: %s. Expected is int' %
-                             (self._name, type(value).__name__))
-        return value
+            raise ValueError('Invalid field type. Expected integer type.')
+        return str(value)
 
-    def _convert(self, value):
-        if value is None:
-            return 0
+    def _convert_get(self, value):
         try:
-            return int(value)
+            return int(value or 0)
         except ValueError:
             return None
 
@@ -51,21 +46,17 @@ class DateValidatorMixin(object):
             (2016, 3, 3, 12, 20, 30) when t = 1457007630.000001
         """
 
-    def _validate(self, value):
+    def _convert_set(self, value):
         if not isinstance(value, dt.datetime) and not \
                 isinstance(value, dt.date):
-            raise ValueError('Invalid type of field %s: %s. Expected '
-                             'is datetime.datetime or datetime.date' %
-                             (self._name, type(value).__name__))
+            raise ValueError('Invalid field type. Expected datetime type.')
 
         # return round(value.timestamp())  # without microseconds
         return value.strftime('%s')  # both class implements it
 
-    def _convert(self, value):
-        if not value:
-            return value
+    def _convert_get(self, value):
         try:
-            value = int(value)
+            value = int(value or 0)
         except ValueError:
             return None
         # TODO: maybe use utcfromtimestamp?.
@@ -73,11 +64,9 @@ class DateValidatorMixin(object):
 
 
 class DateTimeValidatorMixin(DateValidatorMixin):
-    def _convert(self, value):
-        if not value:
-            return value
+    def _convert_get(self, value):
         try:
-            value = int(value)
+            value = int(value or 0)
         except ValueError:
             return None
         # TODO: maybe use utcfromtimestamp?.
@@ -101,12 +90,12 @@ class EnumValidatorMixin(object):
         super(EnumValidatorMixin, self).__init__(
             enum=enum, default=default, **kwargs)
 
-    def _validate(self, value):
+    def _convert_set(self, value):
         if value not in self._enum:
             raise ValueError('This value is not enumerate')
         return value
 
-    def _convert(self, value):
+    def _convert_get(self, value):
         return value if value in self._enum else self._enum_default
 
 
@@ -125,7 +114,7 @@ class ForeignObjectValidatorMixin(object):
                 import sys
                 to_path = to.split('.')
                 object_rel = to_path.pop()
-                package_rel = '.'.join(to_path)                
+                package_rel = '.'.join(to_path)
 
                 if PY2:
                     import imp as _imp
@@ -135,22 +124,22 @@ class ForeignObjectValidatorMixin(object):
                 _imp.acquire_lock()
                 module1 = __import__('.'.join(to_path))
                 _imp.release_lock()
-                
+
                 try:
                     self._to = getattr(sys.modules[package_rel], object_rel)
                 except AttributeError:
                     raise AttributeError('Package "%s" not contain model %s' %
-                                         (package_rel, object_rel))
+                                        (package_rel, object_rel))
             else:
                 self._to = to
 
-    def _validate(self, value):
+    def _convert_set(self, value):
         if isinstance(value, bool):
             raise ValueError('Invalid type of field %s: %s.' %
                              (self._name, type(value).__name__))
         return value
 
-    def _convert(self, value):
+    def _convert_get(self, value):
         return value
 
     def _to(self, key):

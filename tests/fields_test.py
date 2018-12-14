@@ -1,5 +1,4 @@
 import datetime as dt
-import sys
 import pytest
 import redis
 from six import PY2
@@ -71,8 +70,8 @@ class TestModelField(CommonHelper):
         user1 = UserObject(1)
         user1.name = 'Username'
         assert user1.name == 'Username'
-        user1.name = 12345
-        assert user1.name == 12345
+        user1.name = '12345'
+        assert user1.name == '12345'
         self.assert_commands_count(3)
 
     def test_remove_element(self):
@@ -107,10 +106,10 @@ class TestModelField(CommonHelper):
     def test_redis_pass_arg_directly(self):
         db.hset = MagicMock()
         user1 = UserObject(1)
-        user1.login = 1234
+        user1.login = '1234'
         # redis independently convert key to string
         db.hset.assert_called_once_with('astra::userobject::hash::1',
-                                        'login', 1234)
+                                        'login', '1234')
 
     def test_success_saved(self):
         user_write = UserObject(1)
@@ -165,8 +164,19 @@ class TestBaseHash(CommonHelper):
             user1.login = False
         self.assert_commands_count(0)
 
+    def test_number_to_char_exception(self):
+        user1 = UserObject(1)
+        with pytest.raises(ValueError):
+            user1.login = 12345
+        self.assert_commands_count(0)
+
 
 class TestIntegerHash(CommonHelper):
+    def test_none_to_int_exception(self):
+        user1 = UserObject(1)
+        with pytest.raises(ValueError):
+            user1.rating = None
+
     def test_char_to_int_exception(self):
         user1 = UserObject(1)
         with pytest.raises(ValueError):
@@ -182,7 +192,7 @@ class TestIntegerHash(CommonHelper):
         user1 = UserObject(1)
         user1.rating = 5  # convert to str on redis
         user1_read = UserObject(1)
-        assert user1_read.rating == 5  # convert to user type
+        assert user1_read.rating == 5  # convert back to user type
 
 
 class TestBooleanHash(CommonHelper):
@@ -275,7 +285,8 @@ class TestHashDelete(CommonHelper):
             rating = models.IntegerHash()
             field1 = models.CharField()
 
-        SampleObject1.get_db = self._get_db
+            def get_db(self):
+                return db
         test_object = SampleObject1(1, name='Alice', rating=22, field1='test')
         self.assert_commands_count(3)  # two times set hash + field
         test_object.remove()
@@ -285,22 +296,34 @@ class TestHashDelete(CommonHelper):
 class TestLinkField(CommonHelper):
     def test_save_foreign_link_as_object(self):
         site1 = SiteObject(1, name='redis.io')
-        UserObject(1, name='Username', site_id=site1)
+        UserObject(1, name='Username', site1=site1)
 
         user_reader1 = UserObject(1)
-        assert user_reader1.site_id.pk == '1'
-        assert isinstance(user_reader1.site_id, SiteObject)
+        assert user_reader1.site1.pk == '1'
+        assert isinstance(user_reader1.site1, SiteObject)
 
     def test_save_foreign_link_as_string(self):
         site2 = SiteObject(2)
-        site2.name='redis.io'
+        site2.name = 'redis.io'
 
-        UserObject(1, name='Username', site_id='2')
+        UserObject(1, name='Username', site1='2')
 
         user_reader1 = UserObject(1)
-        assert user_reader1.site_id.pk == '2'
-        assert user_reader1.site_id.name == 'redis.io'
-        assert isinstance(user_reader1.site_id, SiteObject)
+        assert user_reader1.site1.pk == '2'
+        assert user_reader1.site1.name == 'redis.io'
+        assert isinstance(user_reader1.site1, SiteObject)
+
+    def test_foreign_link_remove(self):
+        site1 = SiteObject(1, name='redis.io')
+        UserObject(1, name='Username', site1=site1)
+
+        user1 = UserObject(1)
+        user1.site1 = None
+
+        user2 = UserObject(1)
+        assert user2.site1 is None
+
+
 
 class TestIntegerField(CommonHelper):
     def test_save_not_integer_value(self):
@@ -641,18 +664,18 @@ class TestSignalsFeature(CommonHelper):
         site = SiteObject(pk=1, name="redis.io")
         with patch.object(UserObject, 'save', return_value=None) as mock_model:
             user1 = UserObject(1)
-            user1.site_id = site
-        mock_model.assert_called_once_with(action='m2m_link', attr='site_id',
+            user1.site1 = site
+        mock_model.assert_called_once_with(action='m2m_link', attr='site1',
             value=site)
 
     @pytest.mark.skipif(PY2, reason="requires python3")
     def test_m2m_remove_signal(self):
         site = SiteObject(pk=1, name="redis.io")
         user1 = UserObject(1)
-        user1.site_id = site
+        user1.site1 = site
         with patch.object(UserObject, 'save', return_value=None) as mock_model:
-            user1.site_id = None
-        mock_model.assert_called_once_with(action='m2m_remove', attr='site_id')
+            user1.site1 = None
+        mock_model.assert_called_once_with(action='m2m_remove', attr='site1')
 
     @pytest.mark.skipif(PY2, reason="requires python3")
     def test_remove_signals(self):
@@ -668,16 +691,13 @@ class TestSignalsFeature(CommonHelper):
 class TestDeepAttributes(CommonHelper):
     def test_access_to_none_attribute(self):
         user1 = UserObject(1, name='User1')
-        # site1 = SiteObject(1, name='example.com')
-        # user1.site_id = site1
-
-        assert user1.site_id is None
+        assert user1.site1 is None
 
     def test_exception_to_deep_attribute(self):
         user1 = UserObject(1, name='User1')
         with pytest.raises(AttributeError):
             # 'NoneType' object has no attribute 'some_child'
-            k = user1.site_id.some_child
+            k = user1.site1.some_child
 
     def test_deep_attribute_with_default_model(self):
         user1 = UserObject(1, name='User1')
@@ -694,6 +714,34 @@ class TestAutoImport(CommonHelper):
         site1 = SiteObject(1, name='example.com')
 
         from .other_models import SiteColorModel
-
-        SiteColorModel.get_db = self._get_db
         assert isinstance(site1.site_color, SiteColorModel)
+
+
+class TestValidators(CommonHelper):
+    def test_validator_feature(self):
+        site = SiteObject(1, name='x'*32)
+        with pytest.raises(ValueError):
+            site.name = 'x'*33
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_validator_for_hash(self):
+        mock = MagicMock()
+        class SampleObject1(models.Model):
+            name = models.CharHash(validators=[mock])
+            def get_db(self):
+                return db
+
+        test_object = SampleObject1(1)
+        test_object.name = 'Name'
+        mock.assert_called_once_with('Name')
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_validator_for_field(self):
+        mock = MagicMock()
+        class SampleObject1(models.Model):
+            value = models.IntegerField(validators=[mock])
+            def get_db(self):
+                return db
+
+        test_object = SampleObject1(1, value=1234)
+        mock.assert_called_once_with(1234)

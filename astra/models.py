@@ -1,5 +1,3 @@
-from abc import abstractmethod
-
 from astra import fields
 from astra import validators
 
@@ -35,11 +33,9 @@ class Model(object):
         if kwargs:
             self._astra_load_fields(**kwargs)
 
-    @abstractmethod
     def get_db(self):
-        pass
+        raise NotImplementedError('get_db method not implemented')
 
-    @abstractmethod
     def save(self, action, attr=None, value=None):
         pass
 
