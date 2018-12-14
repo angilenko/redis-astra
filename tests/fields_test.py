@@ -149,6 +149,14 @@ class TestModelField(CommonHelper):
         user1.credits_test_setex(10, 214)  # value: 214, 10 second ttl
         assert user1.credits_test == 214
 
+    def test_hash_exists(self):
+        user1 = UserObject(1, name='Test')
+        assert user1.hash_exist() is True
+
+    def test_hash_non_exists(self):
+        user2 = UserObject(2)
+        assert user2.hash_exist() is False
+
 
 # Test hash fields with value conversions:
 class TestBaseHash(CommonHelper):
@@ -209,6 +217,10 @@ class TestBooleanHash(CommonHelper):
 
 
 class TestDateHash(CommonHelper):
+    def test_empy_date(self):
+        user1 = UserObject(1)
+        assert user1.registration_date is not None
+
     def test_save_not_date_exception(self):
         user1 = UserObject(1)
         with pytest.raises(ValueError):
@@ -682,6 +694,28 @@ class TestSignalsFeature(CommonHelper):
             call(action='post_remove', attr='pk', value='1')
         ], any_order=True)
 
+    @pytest.mark.parametrize('field_type', [
+        models.CharHash,
+        models.CharField
+    ])
+    def test_value_on_save(self, field_type):
+        class SampleObject1(models.Model):
+            name = field_type()
+            description = field_type()
+
+            def get_db(self):
+                return db
+
+            def save(self, action, attr=None, value=None):
+                if action == 'pre_assign' and attr == 'name':
+                    return '%s_was_changed' % value
+
+        test_object = SampleObject1(1)
+        test_object.name = 'name'
+        test_object.description = 'description'
+        assert test_object.name == 'name_was_changed'
+        assert test_object.description == 'description'
+
 
 class TestDeepAttributes(CommonHelper):
     def test_access_to_none_attribute(self):
@@ -719,10 +753,15 @@ class TestValidators(CommonHelper):
             site.name = 'x'*33
 
     @pytest.mark.skipif(PY2, reason="requires python3")
-    def test_validator_for_hash(self):
+    @pytest.mark.parametrize('field_type', [
+        models.CharHash,
+        models.CharField
+    ])
+    def test_validator_for_hash(self, field_type):
         mock = MagicMock()
         class SampleObject1(models.Model):
-            name = models.CharHash(validators=[mock])
+            name = field_type(validators=[mock])
+
             def get_db(self):
                 return db
 
@@ -731,10 +770,15 @@ class TestValidators(CommonHelper):
         mock.assert_called_once_with('Name')
 
     @pytest.mark.skipif(PY2, reason="requires python3")
-    def test_validator_for_field(self):
+    @pytest.mark.parametrize('field_type', [
+        models.IntegerField,
+        models.IntegerHash
+    ])
+    def test_validator_for_field(self, field_type):
         mock = MagicMock()
         class SampleObject1(models.Model):
-            value = models.IntegerField(validators=[mock])
+            value = field_type(validators=[mock])
+
             def get_db(self):
                 return db
 
