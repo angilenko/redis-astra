@@ -1,4 +1,12 @@
-2018-12-13
+v2.0.1 - 2018-12-17 - beta
+=================
+
+- Remove all hooks and save() method
+- New approach to tracking data changes: setattr, getattr, set_xx, get_xx
+- Helpers, getters and setters are being created as precompiled objects
+
+
+v2.0.0 - 2018-12-13 - beta
 =================
 
 - Fix CharField and CharHash: only strings are accept

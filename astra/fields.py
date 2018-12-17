@@ -1,200 +1,140 @@
-# All model fields inherited from this
-from astra.validators import ForeignObjectValidatorMixin
+from astra import model
+from astra import base_fields
+from astra import validators
 
 
-class ModelField(object):
-    _directly_redis_helpers = ()  # Direct method helpers
-    _field_type_name = '--'
+class CharField(validators.CharValidatorMixin, base_fields.BaseField):
+    directly_redis_helpers = ('setex', 'setnx', 'append', 'bitcount',
+                              'getbit', 'getrange', 'setbit', 'setrange',
+                              'strlen', 'expire', 'ttl')
 
-    def __init__(self, **kwargs):
-        if 'instance' in kwargs:
-            self._name = kwargs['name']
-            self._model = kwargs['model']
-        self._options = kwargs
 
-    def _get_key_name(self, is_hash=False):
+class BooleanField(validators.BooleanValidatorMixin, base_fields.BaseField):
+    directly_redis_helpers = ('setex', 'setnx', 'expire', 'ttl',)
+
+
+class IntegerField(validators.IntegerValidatorMixin, base_fields.BaseField):
+    directly_redis_helpers = ('setex', 'setnx', 'incr', 'incrby', 'decr',
+                              'decrby', 'getset', 'expire', 'ttl',)
+
+
+class ForeignKey(validators.ForeignObjectValidatorMixin, base_fields.BaseField):
+    def assign(self, value):
         """
-        Create redis key. Schema:
-        prefix::object_name::field_type::id::field_name, e.g.
-            prefix::user::fld::12::login
-            prefix::user::list::12::sites
-            prefix::user::zset::12::winners
-            prefix::user::hash::54
+        Support remove hash field if None passed as value
         """
-        parent_class_name = self._model.__class__.__name__.lower()
-        items = [self._model._astra_prefix, parent_class_name,
-                 self._field_type_name, str(self._model.pk)]
-        if not is_hash:
-            items.append(self._name)
-        return '::'.join(items)
+        if value is None:
+            self.db.delete(self.get_key_name())
+        elif isinstance(value, model.Model):
+            super(ForeignKey, self).assign(value.pk)
+        else:
+            super(ForeignKey, self).assign(value)
 
-    def _assign(self, value):
-        raise NotImplementedError('Subclasses must implement _assign')
-
-    def _obtain(self):
-        raise NotImplementedError('Subclasses must implement _obtain')
-
-    def _helper(self, method_name):
-        if method_name not in self._directly_redis_helpers:
-            raise AttributeError('Invalid attribute with name "%s"'
-                                 % (method_name,))
-        original_command = getattr(self._model._astra_get_db(), method_name)
-        current_key = self._get_key_name()
-
-        def _method_wrapper(*args, **kwargs):
-            new_args = [current_key]
-            for v in args:
-                new_args.append(v)
-            return original_command(*new_args, **kwargs)
-
-        return _method_wrapper
-
-    def _remove(self):
-        self._model._astra_get_db().delete(self._get_key_name())
-
-    def _run_validators(self, value):
-        if 'validators' in self._options:
-            for validator in self._options['validators']:
-                validator(value)
+    def obtain(self):
+        """
+        Convert saved pk to target object
+        """
+        if not self._to:
+            raise RuntimeError('Relation model is not loaded')
+        value = super(ForeignKey, self).obtain()
+        return self._to_wrapper(value)
 
 
-# Fields:
-class BaseField(ModelField):
-    _field_type_name = 'fld'
+class DateField(validators.DateValidatorMixin, base_fields.BaseField):
+    directly_redis_helpers = ('setex', 'setnx', 'expire', 'ttl',)
 
-    def _assign(self, value):
-        self._run_validators(value)
-        saved_value = self._convert_set(value)
 
-        ret = self._model.save(action='pre_assign', attr=self._name,
-                               value=value)
-        if ret is not None:  # Value was changed. Validate and convert. Again
-            self._run_validators(ret)
-            saved_value = self._convert_set(ret)
+class DateTimeField(validators.DateTimeValidatorMixin, base_fields.BaseField):
+    directly_redis_helpers = ('setex', 'setnx', 'expire', 'ttl',)
 
-        self._model._astra_get_db().set(self._get_key_name(), saved_value)
-        self._model.save(action='post_assign', attr=self._name, value=value)
 
-    def _obtain(self):
-        value = self._model._astra_get_db().get(self._get_key_name())
-        return self._convert_get(value)
-
-    def _convert_set(self, value):
-        """ Check saved value before send to server """
-        raise NotImplementedError('Subclasses must implement _convert_set')
-
-    def _convert_get(self, value):
-        """ Convert server answer to user type """
-        raise NotImplementedError('Subclasses must implement _convert_get')
+class EnumField(validators.EnumValidatorMixin, base_fields.BaseField):
+    pass
 
 
 # Hashes
-class BaseHash(ModelField):
-    _field_type_name = 'hash'
+class CharHash(validators.CharValidatorMixin, base_fields.BaseHash):
+    pass
 
-    def _assign(self, value):
-        self._run_validators(value)
-        saved_value = self._convert_set(value)
 
-        ret = self._model.save(action='pre_assign', attr=self._name,
-                               value=value)
-        if ret is not None:  # Value was changed. Validate and convert. Again
-            self._run_validators(ret)
-            saved_value = self._convert_set(ret)
+class BooleanHash(validators.BooleanValidatorMixin, base_fields.BaseHash):
+    pass
 
-        self._model._astra_get_db().hset(self._get_key_name(True),
-                                         self._name, saved_value)
-        if self._model._astra_hash_loaded:
-            self._model._astra_hash[self._name] = saved_value
-        self._model._astra_hash_exist = True
-        self._model.save(action='post_assign', attr=self._name, value=value)
 
-    def _obtain(self):
-        self._load_hash()
-        return self._convert_get(self._model._astra_hash.get(self._name, None))
+class IntegerHash(validators.IntegerValidatorMixin, base_fields.BaseHash):
+    pass
 
-    def _load_hash(self):
-        if self._model._astra_hash_loaded:
-            return
-        self._model._astra_hash_loaded = True
-        self._model._astra_hash = \
-            self._model._astra_get_db().hgetall(
-                self._get_key_name(True))
-        if not self._model._astra_hash:  # None if hash field is not exist
-            self._model._astra_hash = {}
-            self._model._astra_hash_exist = False
+
+class DateHash(validators.DateValidatorMixin, base_fields.BaseHash):
+    pass
+
+
+class DateTimeHash(validators.DateTimeValidatorMixin, base_fields.BaseHash):
+    pass
+
+
+class EnumHash(validators.EnumValidatorMixin, base_fields.BaseHash):
+    pass
+
+
+class List(base_fields.BaseCollection):
+    """
+    :
+    """
+    field_type_name = 'list'
+
+    _allowed_redis_methods = ('lindex', 'linsert', 'llen', 'lpop', 'lpush',
+                              'lpushx', 'lrange', 'lrem', 'lset', 'ltrim',
+                              'rpop', 'rpoplpush', 'rpush', 'rpushx',)
+    _single_object_answered_redis_methods = ('lindex', 'lpop', 'rpop',)
+    _list_answered_redis_methods = ('lrange',)
+
+    def __len__(self):
+        return self.llen()
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return self.lrange(item.start, item.stop)
         else:
-            self._model._astra_hash_exist = True
-
-    def _convert_set(self, value):
-        """ Check saved value before send to server """
-        raise NotImplementedError('Subclasses must implement _convert_set')
-
-    def _convert_get(self, value):
-        """ Convert server answer to user type """
-        raise NotImplementedError('Subclasses must implement _convert_get')
-
-    def _remove(self):
-        # Delete one record on hash. _astra_hash_exist is not changes
-        # eg hash may be exist
-        self._model._astra_get_db().hdel(self._get_key_name(True), self._name)
+            ret = self.lrange(item, item)
+            return ret[0] if len(ret) == 1 else None
 
 
-# Implements for three types of lists
-class BaseCollection(ForeignObjectValidatorMixin, ModelField):
-    _field_type_name = ''
-    _allowed_redis_methods = ()
+class Set(base_fields.BaseCollection):
+    field_type_name = 'set'
+    _allowed_redis_methods = ('sadd', 'scard', 'sdiff', 'sdiffstore', 'sinter',
+                              'sinterstore', 'sismember', 'smembers', 'smove',
+                              'spop', 'srandmember', 'srem', 'sscan', 'sunion',
+                              'sunionstore')
+    _single_object_answered_redis_methods = ('spop',)
+    _list_answered_redis_methods = ('sdiff', 'sinter', 'smembers',
+                                    'srandmember', 'sscan', 'sunion',)
+
+    def __len__(self):
+        return self.scard()
+
+
+class SortedSet(base_fields.BaseCollection):
+    field_type_name = 'zset'
+    _allowed_redis_methods = ('zadd', 'zcard', 'zcount', 'zincrby',
+                              'zinterstore', 'zlexcount', 'zrange',
+                              'zrangebylex', 'zrangebyscore', 'zrank', 'zrem',
+                              'zremrangebylex', 'zremrangebyrank',
+                              'zremrangebyscore', 'zrevrange',
+                              'zrevrangebylex', 'zrevrangebyscore', 'zrevrank',
+                              'zscan', 'zscore', 'zunionstore')
     _single_object_answered_redis_methods = ()
-    _list_answered_redis_methods = ()
-    # Other methods will be answered directly
+    _list_answered_redis_methods = ('zrange', 'zrangebylex', 'zrangebyscore',
+                                    'zrevrange', 'zrevrangebylex',
+                                    'zrevrangebyscore', 'zscan', )
 
-    def _obtain(self):
-        return self  # for delegate to __getattr__ on this class
+    def __len__(self):
+        return self.zcard()
 
-    def _assign(self, value):
-        if value is None:
-            self._remove()
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return self.zrangebyscore(item.start or '-inf',
+                                      item.stop or '+inf')
         else:
-            raise ValueError('Collections fields is not possible '
-                             'assign directly')
-
-    def __getattr__(self, item):
-        if item not in self._allowed_redis_methods:
-            return super(BaseCollection, self).__getattribute__(item)
-
-        original_command = getattr(self._model._astra_get_db(), item)
-        current_key = self._get_key_name()
-
-        def _method_wrapper(*args, **kwargs):
-            from astra import models
-
-            # Scan passed args and convert to pk if passed models
-            new_args = [current_key]
-            new_kwargs = dict()
-            for v in args:
-                new_args.append(v.pk if isinstance(v, models.Model) else v)
-            for k, v in kwargs.items():
-                new_kwargs[k] = v.pk if isinstance(v, models.Model) else v
-
-            # Call original method on the database
-            answer = original_command(*new_args, **new_kwargs)
-
-            # Wrap to model
-            if item in self._single_object_answered_redis_methods:
-                return None if not answer else self._to(answer)
-
-            if item in self._list_answered_redis_methods:
-                wrapper_answer = []
-                for pk in answer:
-                    if not pk:
-                        wrapper_answer.append(None)
-                    else:
-                        if isinstance(pk, tuple) and len(pk) > 0:
-                            wrapper_answer.append((self._to(pk[0]), pk[1]))
-                        else:
-                            wrapper_answer.append(self._to(pk))
-
-                return wrapper_answer
-            return answer  # Direct answer
-
-        return _method_wrapper
+            ret = self.zrangebyscore(item, item)
+            return ret[0] if len(ret) == 1 else None

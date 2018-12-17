@@ -60,7 +60,7 @@ class CommonHelper:
 
 # Test of base fields behavior
 class TestModelField(CommonHelper):
-    def test_primary_key_is_string_always(self):
+    def test_primary_key_is_always_string(self):
         user = UserObject(1)
         user.name = 'Username'
         user2 = UserObject('1')
@@ -74,7 +74,7 @@ class TestModelField(CommonHelper):
         assert user1.name == '12345'
         self.assert_commands_count(3)
 
-    def test_remove_element(self):
+    def test_remove_object(self):
         user1 = UserObject(1)
         user1.name = 'Username'
         user1.remove()
@@ -149,13 +149,28 @@ class TestModelField(CommonHelper):
         user1.credits_test_setex(10, 214)  # value: 214, 10 second ttl
         assert user1.credits_test == 214
 
-    def test_hash_exists(self):
+    def test_hash_exists1(self):
         user1 = UserObject(1, name='Test')
         assert user1.hash_exist() is True
+
+    def test_hash_exists2(self):
+        user1 = UserObject(1, name='Test')
+        read_user1 = UserObject(1)
+        assert read_user1.hash_exist() is True
 
     def test_hash_non_exists(self):
         user2 = UserObject(2)
         assert user2.hash_exist() is False
+
+    def test_model_without_hash(self):
+        class SampleObject(models.Model):
+            name = models.CharField()
+
+            def get_db(self):
+                return db
+        test_object = SampleObject(1, name='Alice')
+        with pytest.raises(AttributeError):
+            a = test_object.hash_exist()
 
 
 # Test hash fields with value conversions:
@@ -334,7 +349,6 @@ class TestLinkField(CommonHelper):
 
         user2 = UserObject(1)
         assert user2.site1 is None
-
 
 
 class TestIntegerField(CommonHelper):
@@ -653,47 +667,36 @@ class TestParentInheritance(CommonHelper):
         assert read_child.field1 == 'test1'
 
 
-class TestSignalsFeature(CommonHelper):
-    @pytest.mark.skipif(PY2, reason="requires python3")
-    def test_assign_signals(self):
-        with patch.object(UserObject, 'save', return_value=None) as mock_model:
-            user1 = UserObject(1, name='User1')
-            user1.rating = 5
-        mock_model.assert_has_calls([
-            call(action='pre_assign', attr='name', value='User1'),
-            call(action='post_assign', attr='name', value='User1'),
-            call(action='pre_assign', attr='rating', value=5),
-            call(action='post_assign', attr='rating', value=5),
-        ], any_order=True)
-
-    @pytest.mark.skipif(PY2, reason="requires python3")
-    def test_m2m_link_signal(self):
-        site = SiteObject(pk=1, name="redis.io")
-        with patch.object(UserObject, 'save', return_value=None) as mock_model:
-            user1 = UserObject(1)
-            user1.site1 = site
-        mock_model.assert_called_with(action='m2m_link', attr='site1',
-                                      value=site)
-
-    @pytest.mark.skipif(PY2, reason="requires python3")
-    def test_m2m_remove_signal(self):
-        site = SiteObject(pk=1, name="redis.io")
+class TestAttsBase(CommonHelper):
+    def test_set_prop(self):
         user1 = UserObject(1)
-        user1.site1 = site
-        with patch.object(UserObject, 'save', return_value=None) as mock_model:
-            user1.site1 = None
-        mock_model.assert_called_once_with(action='m2m_remove', attr='site1')
+        user1.name = 'User123'
+        assert UserObject(1).name == 'User123'
 
-    @pytest.mark.skipif(PY2, reason="requires python3")
-    def test_remove_signals(self):
-        user1 = UserObject(pk=1, name='Mike', rating=5)
-        with patch.object(UserObject, 'save', return_value=None) as mock_model:
-            user1.remove()
-        mock_model.assert_has_calls([
-            call(action='pre_remove', attr='pk', value='1'),
-            call(action='post_remove', attr='pk', value='1')
-        ], any_order=True)
+    def test_set_prop_on_init(self):
+        user1 = UserObject(1, name='User123')
+        assert UserObject(1).name == 'User123'
 
+    def test_set_prop_by_setter(self):
+        user1 = UserObject(1)
+        user1.set_name('User123')
+        assert UserObject(1).name == 'User123'
+
+    def test_set_prop_by_setattr(self):
+        user1 = UserObject(1)
+        user1.setattr('name', 'User123')
+        assert UserObject(1).name == 'User123'
+
+    def test_get_prop_by_getter(self):
+        user1 = UserObject(1, name='User123')
+        assert UserObject(1).get_name() == 'User123'
+
+    def test_get_prop_by_getprop(self):
+        user1 = UserObject(1, name='User123')
+        assert UserObject(1).getattr('name') == 'User123'
+
+
+class TestAttrsExtend(CommonHelper):
     @pytest.mark.parametrize('field_type', [
         models.CharHash,
         models.CharField
@@ -706,15 +709,103 @@ class TestSignalsFeature(CommonHelper):
             def get_db(self):
                 return db
 
-            def save(self, action, attr=None, value=None):
-                if action == 'pre_assign' and attr == 'name':
-                    return '%s_was_changed' % value
+            def setattr(self, field_name, value):
+                if field_name == 'name':
+                    value = '%s_was_changed' % value
+                return super(SampleObject1, self).setattr(field_name, value)
 
         test_object = SampleObject1(1)
         test_object.name = 'name'
         test_object.description = 'description'
         assert test_object.name == 'name_was_changed'
         assert test_object.description == 'description'
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_track_changes(self):
+        with patch.object(UserObject, 'setattr',
+                          side_effect=['User1', 5]) as mo:
+            user1 = UserObject(1, name='User1')
+            user1.rating = 5
+            mo.assert_has_calls([
+                call('name', 'User1'),
+                call('rating', 5),
+            ], any_order=True)
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_m2m_link_signal(self):
+        site = SiteObject(pk=1, name="redis.io")
+        with patch.object(UserObject, 'setattr', return_value=None) as mo:
+            user1 = UserObject(1)
+            user1.site1 = site
+            mo.assert_called_with('site1', site)
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_m2m_remove_signal(self):
+        site = SiteObject(pk=1, name="redis.io")
+        user1 = UserObject(1)
+        user1.site1 = site
+        with patch.object(UserObject, 'setattr', return_value=None) as mo:
+            user1.site1 = None
+            mo.assert_called_once_with('site1', None)
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_remove_signals(self):
+        user1 = UserObject(pk=1, name='Mike', rating=5)
+        with patch.object(UserObject, 'remove', return_value=None) as mo:
+            user1.remove()
+            mo.assert_called_once()
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_set_attr_feature(self):
+        class SampleObject(models.Model):
+            name = models.CharHash()
+            def get_db(self):
+                return db
+            def set_name(self, value):
+                self.setattr('name', value + 'AA')
+
+        obj = SampleObject(1)
+        obj.name = '123'
+        assert obj.name == '123AA'
+
+    def test_set_attr_feature2(self):
+        class SampleObject(models.Model):
+            name = models.CharHash()
+            def get_db(self):
+                return db
+            def get_name(self):
+                v = self.getattr('name')
+                return v + 'OO'
+
+        obj = SampleObject(1)
+        obj.name = '123'
+        assert obj.name == '123OO'
+
+    @pytest.mark.skipif(PY2, reason="requires python3")
+    def test_set_attr_feature_calls(self):
+        class SampleObject(models.Model):
+            name = models.CharHash()
+            def get_db(self):
+                return db
+            def set_name(self, value):
+                self.setattr('name', value + 'AA')
+
+        with patch.object(SampleObject, 'set_name', return_value=None) as mo:
+            obj = SampleObject(2)
+            obj.name = '123'
+            mo.assert_called_with(obj, '123')
+
+    def test_set_attr_feature_on_init(self):
+        class SampleObject(models.Model):
+            name = models.CharHash()
+            def get_db(self):
+                return db
+            def set_name(self, value):
+                self.setattr('name', value + 'AA')
+
+        obj = SampleObject(1, name='123')
+        assert obj.name == '123AA'
+
 
 
 class TestDeepAttributes(CommonHelper):
@@ -757,7 +848,7 @@ class TestValidators(CommonHelper):
         models.CharHash,
         models.CharField
     ])
-    def test_validator_for_hash(self, field_type):
+    def test_validators_1(self, field_type):
         mock = MagicMock()
         class SampleObject1(models.Model):
             name = field_type(validators=[mock])
@@ -774,7 +865,7 @@ class TestValidators(CommonHelper):
         models.IntegerField,
         models.IntegerHash
     ])
-    def test_validator_for_field(self, field_type):
+    def test_validators_2(self, field_type):
         mock = MagicMock()
         class SampleObject1(models.Model):
             value = field_type(validators=[mock])

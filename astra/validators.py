@@ -136,7 +136,7 @@ class ForeignObjectValidatorMixin(object):
     def _convert_set(self, value):
         if isinstance(value, bool):
             raise ValueError('Invalid type of field %s: %s.' %
-                             (self._name, type(value).__name__))
+                             (self.name, type(value).__name__))
         return value
 
     def _convert_get(self, value):

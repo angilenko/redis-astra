@@ -9,7 +9,7 @@ Redis-astra is Python light ORM for Redis.
 *Note*: version 2 has uncomportable changes with version 1. See `CHANGELOG.txt <https://github.com/pilat/redis-astra/blob/master/CHANGELOG.txt>`_
 
 
-Example:
+Base Example:
 
 .. code:: python
 
@@ -34,29 +34,19 @@ Example:
         sites_list = models.List(to=SiteObject)
         viewers = models.IntegerField()
 
-        def save(self, action, attr=None, value=None):
-            print('\t * %s' % kwargs)
-
 
 So you can use it like this:
 
 .. code:: python
 
     >>> user = UserObject(pk=1, name="Mike", viewers=5)
-    	* {'action': 'pre_assign', 'attr': 'name', 'value': 'Mike'}
-	    * {'action': 'post_assign', 'attr': 'name', 'value': 'Mike'}
-        * {'action': 'pre_assign', 'attr': 'viewers', 'value': 5}
-	    * {'action': 'post_assign', 'attr': 'viewers', 'value': 5}
     >>> user.login = 'mike@null.com'
-        * {'action': 'pre_assign', 'attr': 'login', 'value': 'mike@null.com'}
-	    * {'action': 'post_assign', 'attr': 'login', 'value': 'mike@null.com'}
     >>> user.login
     'mike@null.com'
     >>> user.viewers_incr(2)
     7
     >>> site = SiteObject(pk=1, name="redis.io")
     >>> user.site = site
-        * {'attr': 'site', 'action': 'm2m_link', 'value': <Model SiteObject(pk=1)>}
     >>> user.sites_list.lpush(site, site, site)
     3
     >>> len(user.sites_list)
@@ -64,10 +54,52 @@ So you can use it like this:
     >>> user.sites_list[2].name
     'redis.io'
     >>> user.site = None
-	    * {'attr': 'site', 'action': 'm2m_remove'}
     >>> user.remove()
-        * {'action': 'pre_remove', 'attr': 'pk', 'value': '1'}
-        * {'action': 'post_remove', 'attr': 'pk', 'value': '1'}
+
+
+
+You can override some methods for track data changes. For example:
+
+.. code:: python
+
+    import redis
+    from astra import models
+
+    db = redis.StrictRedis(host='127.0.0.1', decode_responses=True)
+
+    class User(models.Model):
+        def get_db(self):
+            return db
+        
+        name = models.CharHash()
+        login = models.CharHash()
+        
+        def set_name(self, value):
+            self.setattr('name', '%s_was_changed' % value)
+        
+        def set_login(self, value):
+            if '@' not in value:
+                raise ValueError('Invalid login')
+            self.setattr('login', value)
+
+        def setattr(self, field_name, value):
+            if field_name == 'name':
+                print('Old name: %s' % self.name)
+                print('Set new name: %s' % value)
+            
+            super().setattr(field_name, value)
+
+    u = User(1, name='Alice', login='new@localhost')
+    >> Old name: 
+    >> Set new name: Alice_was_changed
+    u.login
+    >> 'new@localhost'
+    u.login = 'newlogin'
+    >> .. ValueError: Invalid login
+    u.login = 'newlogin@localhost'
+    u.name = 'New name'
+    >> Old name: Alice_was_changed
+    >> Set new name: New name_was_changed
 
 
 
