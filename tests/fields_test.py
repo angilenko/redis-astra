@@ -753,7 +753,7 @@ class TestAttrsExtend(CommonHelper):
         user1 = UserObject(pk=1, name='Mike', rating=5)
         with patch.object(UserObject, 'remove', return_value=None) as mo:
             user1.remove()
-            mo.assert_called_once()
+            mo.assert_called_once_with()
 
     @pytest.mark.skipif(PY2, reason="requires python3")
     def test_set_attr_feature(self):
