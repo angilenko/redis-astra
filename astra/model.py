@@ -182,7 +182,7 @@ class Model(object):
             for field_name in astra_fields.keys():
                 field = self._get_original_field(field_name)
                 if isinstance(field, base_fields.BaseHash):
-                    field.force_hash_exists()
+                    field.force_check_hash_exists()
                     hash_found = True
                     break
             if not hash_found:

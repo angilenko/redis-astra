@@ -1,4 +1,4 @@
-# All model fields inherited from this
+import datetime as dt
 from astra.validators import ForeignObjectValidatorMixin
 
 
@@ -111,11 +111,10 @@ class BaseHash(ModelField):
         raise NotImplementedError('Subclasses must implement _convert_get')
 
     def remove(self):
-        # Delete one record on hash. _astra_hash_exist is not changes
-        # eg hash may be exist
         self.db.hdel(self.get_key_name(True), self.name)
+        self.model._astra_hash_exist = None  # Need to verify again
 
-    def force_hash_exists(self):
+    def force_check_hash_exists(self):
         self.model._astra_hash_exist = self.db.exists(self.get_key_name(True))
 
 
@@ -139,21 +138,28 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
 
     def __getattr__(self, item):
         if item not in self._allowed_redis_methods:
-            return super(BaseCollection, self).__getattribute__(item)
+            return super(BaseCollection, self).__getattr__(item)
 
         original_command = getattr(self.db, item)
         current_key = self.get_key_name()
 
-        def _method_wrapper(*args, **kwargs):
-            from astra import models
+        from astra import model
+        def modify_arg(v):
+            if isinstance(v, model.Model):
+                return v.pk
+            elif isinstance(v, (dt.datetime, dt.date,)):
+                return int(v.strftime('%s'))
+            else:
+                return v
 
+        def _method_wrapper(*args, **kwargs):
             # Scan passed args and convert to pk if passed models
             new_args = [current_key]
             new_kwargs = dict()
             for v in args:
-                new_args.append(v.pk if isinstance(v, models.Model) else v)
+                new_args.append(modify_arg(v))
             for k, v in kwargs.items():
-                new_kwargs[k] = v.pk if isinstance(v, models.Model) else v
+                new_kwargs[k] = modify_arg(v)
 
             # Call original method on the database
             answer = original_command(*new_args, **new_kwargs)

@@ -3,7 +3,7 @@ redis-astra.egg-info
 build/
 dist/
 dump.rdb
-.idea
+.vscode/
 .eggs/
 .cache/
 *.egg-info/
@@ -11,4 +11,5 @@ example.py
 test.sh
 .pytest_cache/
 .noseids
+.coverage
 _build/

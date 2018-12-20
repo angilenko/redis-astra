@@ -172,6 +172,27 @@ class TestModelField(CommonHelper):
         with pytest.raises(AttributeError):
             a = test_object.hash_exist()
 
+    def test_hash_exists_with_foreign_key(self):
+        class SampleObject(models.Model):
+            name = models.CharHash()
+            site1 = models.ForeignHash(to=SiteObject)
+            def get_db(self):
+                return db
+        site = SiteObject(1, name='Test site')
+
+        o1 = SampleObject(1)
+        assert not o1.hash_exist()
+
+        o2 = SampleObject(2, name='Test object', site1=site)
+        assert o2.hash_exist()
+        o2.site1 = None
+        assert o2.hash_exist()  # e.g. name still exists
+
+        o3 = SampleObject(3, site1=site)
+        assert o3.hash_exist()
+        o3.site1 = None
+        assert not o3.hash_exist()
+
     def test_alt_keys_prefixes(self):
         class SampleObject(models.Model):
             name = models.CharField()
@@ -333,34 +354,51 @@ class TestHashDelete(CommonHelper):
 
 
 class TestLinkField(CommonHelper):
-    def test_save_foreign_link_as_object(self):
+    @pytest.fixture(params=[
+        (models.ForeignField, 'tests.sample_models.SiteObject'),
+        (models.ForeignField, SiteObject),
+        (models.ForeignHash, 'tests.sample_models.SiteObject'),
+        (models.ForeignHash, SiteObject),
+        (models.ForeignKey, 'tests.sample_models.SiteObject'),
+        (models.ForeignKey, SiteObject),
+    ])
+    def sample_object_cls(self, request):
+        field, to = request.param
+        class SampleObject(models.Model):
+            name = models.CharHash()
+            site1 = field(to=to)
+            def get_db(self):
+                return db
+        return SampleObject
+
+    def test_empty_foreign_link(self, sample_object_cls):
+        sample_object_cls(1, name='Test object')
+        o = sample_object_cls(1)
+        assert not o.site1
+
+    def test_save_foreign_link_as_object(self, sample_object_cls):
         site1 = SiteObject(1, name='redis.io')
-        UserObject(1, name='Username', site1=site1)
+        sample_object_cls(1, name='Test object', site1=site1)
+        o = sample_object_cls(1)
+        assert o.site1.pk == '1'
+        assert isinstance(o.site1, SiteObject)
 
-        user_reader1 = UserObject(1)
-        assert user_reader1.site1.pk == '1'
-        assert isinstance(user_reader1.site1, SiteObject)
-
-    def test_save_foreign_link_as_string(self):
+    def test_save_foreign_link_as_string(self, sample_object_cls):
         site2 = SiteObject(2)
         site2.name = 'redis.io'
+        sample_object_cls(1, name='Test object', site1='2')
+        o = sample_object_cls(1)
+        assert o.site1.pk == '2'
+        assert o.site1.name == 'redis.io'
+        assert isinstance(o.site1, SiteObject)
 
-        UserObject(1, name='Username', site1='2')
-
-        user_reader1 = UserObject(1)
-        assert user_reader1.site1.pk == '2'
-        assert user_reader1.site1.name == 'redis.io'
-        assert isinstance(user_reader1.site1, SiteObject)
-
-    def test_foreign_link_remove(self):
+    def test_foreign_link_remove(self, sample_object_cls):
         site1 = SiteObject(1, name='redis.io')
-        UserObject(1, name='Username', site1=site1)
-
-        user1 = UserObject(1)
-        user1.site1 = None
-
-        user2 = UserObject(1)
-        assert user2.site1 is None
+        sample_object_cls(1, name='Test object', site1=site1)
+        o1 = sample_object_cls(1)
+        o1.site1 = None
+        o2 = sample_object_cls(1)
+        assert o2.site1 is None
 
 
 class TestIntegerField(CommonHelper):
@@ -666,7 +704,7 @@ class TestSortedSet(CommonHelper):
         self.assert_keys_count(0)
 
 
-class TestParentInheritance(CommonHelper):
+class TestInheritance(CommonHelper):
     def test_set_and_get(self):
         child1 = ChildExample()  # Custom constructor generates unique pk
         child1.parent_field = 'test0'
@@ -677,6 +715,20 @@ class TestParentInheritance(CommonHelper):
         read_child = ChildExample(child1_id)
         assert read_child.parent_field == 'test0'
         assert read_child.field1 == 'test1'
+
+    def test_helper_could_convert_values(self):
+        class SampleStorage(models.Model):
+            items = models.SortedSet(to=ChildExample)
+            def get_db(self):
+                return db
+
+        storage = SampleStorage(1)
+
+        child1 = ChildExample()  # ts will be added
+        assert isinstance(child1._ts, dt.datetime)
+
+        storage.items.zadd(child1._ts, child1)
+        assert len(storage.items) == 1
 
 
 class TestAttsBase(CommonHelper):
@@ -817,7 +869,6 @@ class TestAttrsExtend(CommonHelper):
 
         obj = SampleObject(1, name='123')
         assert obj.name == '123AA'
-
 
 
 class TestDeepAttributes(CommonHelper):

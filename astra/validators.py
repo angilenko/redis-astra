@@ -47,8 +47,7 @@ class DateValidatorMixin(object):
         """
 
     def _convert_set(self, value):
-        if not isinstance(value, dt.datetime) and not \
-                isinstance(value, dt.date):
+        if not isinstance(value, (dt.datetime, dt.date,)):
             raise ValueError('Invalid field type. Expected datetime type.')
 
         # return round(value.timestamp())  # without microseconds

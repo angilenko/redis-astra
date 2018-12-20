@@ -18,17 +18,15 @@ class IntegerField(validators.IntegerValidatorMixin, base_fields.BaseField):
                               'decrby', 'getset', 'expire', 'ttl',)
 
 
-class ForeignKey(validators.ForeignObjectValidatorMixin, base_fields.BaseField):
+class ForeignField(validators.ForeignObjectValidatorMixin,
+                   base_fields.BaseField):
     def assign(self, value):
-        """
-        Support remove hash field if None passed as value
-        """
-        if value is None:
+        if value is None:  # Remove field when None was passed
             self.db.delete(self.get_key_name())
         elif isinstance(value, model.Model):
-            super(ForeignKey, self).assign(value.pk)
+            super(ForeignField, self).assign(value.pk)
         else:
-            super(ForeignKey, self).assign(value)
+            super(ForeignField, self).assign(value)
 
     def obtain(self):
         """
@@ -36,9 +34,12 @@ class ForeignKey(validators.ForeignObjectValidatorMixin, base_fields.BaseField):
         """
         if not self._to:
             raise RuntimeError('Relation model is not loaded')
-        value = super(ForeignKey, self).obtain()
+        value = super(ForeignField, self).obtain()
         return self._to_wrapper(value)
 
+
+class ForeignKey(ForeignField):  # legacy alias
+    pass
 
 class DateField(validators.DateValidatorMixin, base_fields.BaseField):
     directly_redis_helpers = ('setex', 'setnx', 'expire', 'ttl',)
@@ -76,6 +77,24 @@ class DateTimeHash(validators.DateTimeValidatorMixin, base_fields.BaseHash):
 class EnumHash(validators.EnumValidatorMixin, base_fields.BaseHash):
     pass
 
+class ForeignHash(validators.ForeignObjectValidatorMixin,
+                  base_fields.BaseHash):
+    def assign(self, value):
+        if value is None:  # Remove hash key when None was passed
+            super(ForeignHash, self).remove()
+        elif isinstance(value, model.Model):
+            super(ForeignHash, self).assign(value.pk)
+        else:
+            super(ForeignHash, self).assign(value)
+
+    def obtain(self):
+        """
+        Convert saved pk to target object
+        """
+        if not self._to:
+            raise RuntimeError('Relation model is not loaded')
+        value = super(ForeignHash, self).obtain()
+        return self._to_wrapper(value)
 
 class List(base_fields.BaseCollection):
     """

@@ -2,6 +2,8 @@ v2.0.1 - 2018-12-20 - beta
 =================
 
 - You can override prefixes for model's keys (get_key_prefix method)
+- ForeignKey became ForeignField, new ForeignHash was added
+- Helpers feature: you can pass datetime value as argument
 
 
 v2.0.1 - 2018-12-17 - beta
