@@ -16,7 +16,6 @@ class Model(object):
         self._astra_hash = {}  # Hash-object cache
         self._astra_hash_loaded = False
         self._astra_database = None
-        self._astra_prefix = 'astra'
         self._astra_hash_exist = None
 
         if pk is None:
@@ -53,7 +52,7 @@ class Model(object):
         src_lines = []
         for fld in astra_fields.keys():
             field = astra_fields[fld]
-            
+
             has_implement_get = hasattr(cls, 'get_%s' % fld)
             has_implement_set = hasattr(cls, 'set_%s' % fld)
             has_implement_del = hasattr(cls, 'del_%s' % fld)
@@ -137,11 +136,11 @@ class Model(object):
     def __repr__(self):
         return '<Model %s(pk=%s)>' % (self.__class__.__name__, self.pk)
 
-    # def __getitem__(self, item):
-    #     return self.getattr(item)
-
     def get_db(self):
         raise NotImplementedError('get_db method not implemented')
+
+    def get_key_prefix(self, ):
+        return '::'.join(['astra', self.__class__.__name__.lower()])
 
     def setattr(self, field_name, value):
         field = self._get_original_field(field_name)

@@ -22,8 +22,7 @@ class ModelField(object):
             prefix::user::zset::12::winners
             prefix::user::hash::54
         """
-        parent_class_name = self.model.__class__.__name__.lower()
-        items = [self.model._astra_prefix, parent_class_name,
+        items = [self.model.get_key_prefix(),
                  self.field_type_name, str(self.model.pk)]
         if not is_hash:
             items.append(self.name)

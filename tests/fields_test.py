@@ -66,7 +66,7 @@ class TestModelField(CommonHelper):
         user2 = UserObject('1')
         assert user2.name == 'Username'
 
-    def test_set_and_read_attrs(self):
+    def test_set_and_read_model_attrs(self):
         user1 = UserObject(1)
         user1.name = 'Username'
         assert user1.name == 'Username'
@@ -171,6 +171,18 @@ class TestModelField(CommonHelper):
         test_object = SampleObject(1, name='Alice')
         with pytest.raises(AttributeError):
             a = test_object.hash_exist()
+
+    def test_alt_keys_prefixes(self):
+        class SampleObject(models.Model):
+            name = models.CharField()
+            def get_db(self):
+                return db
+            def get_key_prefix(self):
+                return 'custom::tst_%s_tst' % self.__class__.__name__.lower()
+
+        SampleObject(1, name='Alice')
+        assert len(commands) == 1
+        assert commands[0][1] == 'custom::tst_sampleobject_tst::fld::1::name'
 
 
 # Test hash fields with value conversions:
