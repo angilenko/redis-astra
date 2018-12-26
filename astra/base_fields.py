@@ -115,7 +115,8 @@ class BaseHash(ModelField):
         self.model._astra_hash_exist = None  # Need to verify again
 
     def force_check_hash_exists(self):
-        self.model._astra_hash_exist = self.db.exists(self.get_key_name(True))
+        self.model._astra_hash_exist = bool(self.db.exists(
+            self.get_key_name(True)))
 
 
 # Implements for three types of lists
@@ -144,13 +145,21 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
         current_key = self.get_key_name()
 
         from astra import model
-        def modify_arg(v):
-            if isinstance(v, model.Model):
-                return v.pk
-            elif isinstance(v, (dt.datetime, dt.date,)):
-                return int(v.strftime('%s'))
+        def modify_arg(value):
+            # Helper could modify your args
+            if isinstance(value, model.Model):
+                return value.pk
+            elif isinstance(value, (dt.datetime, dt.date,)):
+                return int(value.strftime('%s'))
+            elif isinstance(value, dict):
+                # Scan dict and replace datetime values to timestamp. See .zadd
+                new_dict = {}
+                for k, v in value.items():
+                    new_key = modify_arg(k)
+                    new_dict[new_key] = modify_arg(v)
+                return new_dict
             else:
-                return v
+                return value
 
         def _method_wrapper(*args, **kwargs):
             # Scan passed args and convert to pk if passed models
@@ -158,8 +167,7 @@ class BaseCollection(ForeignObjectValidatorMixin, ModelField):
             new_kwargs = dict()
             for v in args:
                 new_args.append(modify_arg(v))
-            for k, v in kwargs.items():
-                new_kwargs[k] = modify_arg(v)
+            new_kwargs = modify_arg(kwargs)
 
             # Call original method on the database
             answer = original_command(*new_args, **new_kwargs)

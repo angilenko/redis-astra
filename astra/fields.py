@@ -1,4 +1,3 @@
-from astra import model
 from astra import base_fields
 from astra import validators
 
@@ -23,8 +22,6 @@ class ForeignField(validators.ForeignObjectValidatorMixin,
     def assign(self, value):
         if value is None:  # Remove field when None was passed
             self.db.delete(self.get_key_name())
-        elif isinstance(value, model.Model):
-            super(ForeignField, self).assign(value.pk)
         else:
             super(ForeignField, self).assign(value)
 
@@ -82,8 +79,6 @@ class ForeignHash(validators.ForeignObjectValidatorMixin,
     def assign(self, value):
         if value is None:  # Remove hash key when None was passed
             super(ForeignHash, self).remove()
-        elif isinstance(value, model.Model):
-            super(ForeignHash, self).assign(value.pk)
         else:
             super(ForeignHash, self).assign(value)
 

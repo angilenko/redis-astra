@@ -1,3 +1,10 @@
+v2.0.2 - 2018-12-27 - beta
+=================
+
+- redis-py >3.0.0 is supported
+- Detailed error description for inappropriate type of field was revert
+
+
 v2.0.1 - 2018-12-20 - beta
 =================
 

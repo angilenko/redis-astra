@@ -7,6 +7,8 @@ from astra import models
 from .sample_models import UserObject, SiteObject, ParentExample, ChildExample
 
 
+REDIS_PY3 = redis.__version__.startswith('3.')  # redis-py newest version
+
 if not PY2:
     from unittest.mock import MagicMock, call, patch
 
@@ -22,8 +24,15 @@ redis.Connection.send_command = patched_send_command
 
 
 # Common class for simplify testing
-class CommonHelper:
+class CommonHelper(object):
     def setup(self):
+        pass
+
+    def _get_db(self):
+        global db
+        return db
+
+    def setup_method(self, test_method):
         global db, commands
         db = redis.StrictRedis(host='127.0.0.1', decode_responses=True)
 
@@ -33,13 +42,6 @@ class CommonHelper:
 
         db.flushall()
         commands = []
-
-    def _get_db(self):
-        global db
-        return db
-
-    def setup_method(self, test_method):
-        pass
 
     def teardown_method(self, test_method):
         pass
@@ -626,36 +628,52 @@ class TestSet(CommonHelper):
 
 
 class TestSortedSet(CommonHelper):
-    def test_add_and_zrange(self):
+    @pytest.fixture
+    def user1(self):
         site1 = SiteObject(1)
         site2 = SiteObject(2)
-        user1 = UserObject(1)
-        # Add items score, member, score, member, ...
-        user1.sites_sorted_set.zadd(100, site1, 300, site2, 200, site1)
+        site3 = SiteObject(3)
+        user1 = UserObject(1, name='Test User')
 
-        user1_read = UserObject(1)
-        answered_list = user1_read.sites_sorted_set.zrange(1, 1)
+        # Add items score, member, score, member, ...
+        if REDIS_PY3:
+            user1.sites_sorted_set.zadd({
+                site1: 100,
+                site2: 300,
+                site1: 200,
+                site3: 400})
+        else:
+            user1.sites_sorted_set.zadd(
+                100, site1,
+                300, site2,
+                200, site1,
+                400, site3)
+
+        return user1
+
+    def test_add_and_zrange(self, user1):
+        site2 = SiteObject(2)
+
+        answered_list = user1.sites_sorted_set.zrange(1, 1)
         assert len(answered_list) == 1
         assert answered_list[0] == site2
 
-    def test_add_and_zrange_by_score(self):
-        site1 = SiteObject(1)
-        site2 = SiteObject(2)
-        user1 = UserObject(1)
-        # Add items score, member, score, member, ...
-        user1.sites_sorted_set.zadd(100, site1, 300, site2, 200, site1)
-        assert user1.sites_sorted_set.zcard() == 2  # only original objects
+    def test_add_and_zrange_by_score(self, user1):
+        site3 = SiteObject(3)
 
-        user1_read = UserObject(1)
-        answered_list = user1_read.sites_sorted_set.zrangebyscore(201, 300)
+        assert user1.sites_sorted_set.zcard() == 3  # only original objects
+        answered_list = user1.sites_sorted_set.zrangebyscore(301, 400)
         assert len(answered_list) == 1
-        assert answered_list[0] == site2
+        assert answered_list[0] == site3
 
     def test_get_with_scores(self):
         user1 = UserObject(1)
         for i in range(1, 10):
             site = SiteObject(i)
-            user1.sites_sorted_set.zadd(i*100, site)
+            if REDIS_PY3:
+                user1.sites_sorted_set.zadd({site: i*100})
+            else:
+                user1.sites_sorted_set.zadd(i*100, site)
 
         with_scores = user1.sites_sorted_set.zrangebyscore('-inf', '+inf',
                                                            withscores=True)
@@ -665,43 +683,48 @@ class TestSortedSet(CommonHelper):
         assert isinstance(first_item[0], SiteObject)
         assert isinstance(first_item[1], float)
 
-    def test_get_by_slice(self):
-        site1 = SiteObject(1)
+    def test_get_by_slice(self, user1):
         site2 = SiteObject(2)
         site3 = SiteObject(3)
-        user1 = UserObject(1)
-        user1.sites_sorted_set.zadd(100, site1, 200, site2, 300, site3)
 
-        user1_read = UserObject(1)
-        result_slice = user1_read.sites_sorted_set[200:300]
+        result_slice = user1.sites_sorted_set[300:400]
         assert result_slice[0] == site2
         assert result_slice[1] == site3
 
-    def test_rem_by_score(self):
-        site1 = SiteObject(1)
-        site2 = SiteObject(2)
+    def test_rem_by_score(self, user1):
         site3 = SiteObject(3)
-        user1 = UserObject(1)
-        user1.sites_sorted_set.zadd(100, site1, 200, site2, 300, site3)
 
         user1_modified = UserObject(1)
-        user1_modified.sites_sorted_set.zremrangebyscore(100, 200)
+        user1_modified.sites_sorted_set.zremrangebyscore(200, 300)
 
-        user1_read = UserObject(1)
         # reverse get:
-        answered_list = user1_read.sites_sorted_set.zrevrangebyscore('+inf',
-                                                                     '-inf')
+        answered_list = user1.sites_sorted_set.zrevrangebyscore('+inf', '-inf')
         assert len(answered_list) == 1
         assert answered_list[0] == site3
 
-    def test_erase_sorted_set(self):
-        user1 = UserObject(1, name='User123')
-        site1 = SiteObject('id1')
-        user1.sites_sorted_set.zadd(1, site1)
-        assert len(user1.sites_sorted_set) == 1
+    def test_erase_sorted_set(self, user1):
+        assert len(user1.sites_sorted_set) == 3
         user1.sites_sorted_set = None
         user1.remove()
         self.assert_keys_count(0)
+
+    def test_helper_could_convert_values(self):
+        class SampleStorage(models.Model):
+            items = models.SortedSet(to=ChildExample)
+            def get_db(self):
+                return db
+
+        storage = SampleStorage(1)
+
+        child1 = ChildExample()  # ts will be added
+        assert isinstance(child1._ts, dt.datetime)
+
+        if REDIS_PY3:
+            storage.items.zadd({child1: child1._ts})
+        else:
+            storage.items.zadd(child1._ts, child1)
+
+        assert len(storage.items) == 1
 
 
 class TestInheritance(CommonHelper):
@@ -715,20 +738,6 @@ class TestInheritance(CommonHelper):
         read_child = ChildExample(child1_id)
         assert read_child.parent_field == 'test0'
         assert read_child.field1 == 'test1'
-
-    def test_helper_could_convert_values(self):
-        class SampleStorage(models.Model):
-            items = models.SortedSet(to=ChildExample)
-            def get_db(self):
-                return db
-
-        storage = SampleStorage(1)
-
-        child1 = ChildExample()  # ts will be added
-        assert isinstance(child1._ts, dt.datetime)
-
-        storage.items.zadd(child1._ts, child1)
-        assert len(storage.items) == 1
 
 
 class TestAttsBase(CommonHelper):

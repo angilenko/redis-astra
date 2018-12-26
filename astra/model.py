@@ -3,13 +3,17 @@ from astra import base_fields
 
 class Model(object):
     """
-    Parent class for all user-objects to be managed
+    Parent class for all user-defined objects.
+    For example:
+
+    db = redis.StrictRedis(host='127.0.0.1', decode_responses=True)
+
     class Stream(models.Model):
         name = models.CharHash()
         ...
 
         def get_db(self):
-            return strict_redis_instance(..)
+            return db
     """
 
     def __init__(self, pk=None, **kwargs):
@@ -135,6 +139,9 @@ class Model(object):
 
     def __repr__(self):
         return '<Model %s(pk=%s)>' % (self.__class__.__name__, self.pk)
+
+    def __hash__(self):
+        return hash('astra:%s:pk:%s' % (self.__class__.__name__, self.pk))
 
     def get_db(self):
         raise NotImplementedError('get_db method not implemented')

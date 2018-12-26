@@ -6,7 +6,8 @@ from six import string_types, integer_types, PY2
 class CharValidatorMixin(object):
     def _convert_set(self, value):
         if not isinstance(value, string_types):
-            raise ValueError('Invalid field type. Expected string type.')
+            raise ValueError('String expected, but %s was given for '
+                             'field %s ' % (type(value).__name__, self.name))
         return value
 
     def _convert_get(self, value):
@@ -16,7 +17,8 @@ class CharValidatorMixin(object):
 class BooleanValidatorMixin(object):
     def _convert_set(self, value):
         if not isinstance(value, bool):
-            raise ValueError('Invalid field type. Expected boolean type.')
+            raise ValueError('Boolean expected, but %s was given for '
+                             'field %s ' % (type(value).__name__, self.name))
         return '1' if bool(value) else '0'
 
     def _convert_get(self, value):
@@ -26,7 +28,8 @@ class BooleanValidatorMixin(object):
 class IntegerValidatorMixin(object):
     def _convert_set(self, value):
         if not isinstance(value, integer_types):
-            raise ValueError('Invalid field type. Expected integer type.')
+            raise ValueError('Integer expected, but %s was given for '
+                             'field %s ' % (type(value).__name__, self.name))
         return str(value)
 
     def _convert_get(self, value):
@@ -48,7 +51,8 @@ class DateValidatorMixin(object):
 
     def _convert_set(self, value):
         if not isinstance(value, (dt.datetime, dt.date,)):
-            raise ValueError('Invalid field type. Expected datetime type.')
+            raise ValueError('Datetime or date expected, but %s was given for '
+                             'field %s ' % (type(value).__name__, self.name))
 
         # return round(value.timestamp())  # without microseconds
         return value.strftime('%s')  # both class implements it
@@ -133,10 +137,15 @@ class ForeignObjectValidatorMixin(object):
                 self._to = to
 
     def _convert_set(self, value):
-        if isinstance(value, bool):
-            raise ValueError('Invalid type of field %s: %s.' %
-                             (self.name, type(value).__name__))
-        return value
+        from astra import model
+        if isinstance(value, model.Model):
+            return value.pk
+        elif isinstance(value, string_types + integer_types):
+            return value
+        
+        raise ValueError('Model instance, string or integer are expected, '
+                            'but %s was given for field %s ' % (
+                                type(value).__name__, self.name))
 
     def _convert_get(self, value):
         return value
