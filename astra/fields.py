@@ -130,15 +130,17 @@ class Set(base_fields.BaseCollection):
 
 class SortedSet(base_fields.BaseCollection):
     field_type_name = 'zset'
-    _allowed_redis_methods = ('zadd', 'zcard', 'zcount', 'zincrby',
-                              'zinterstore', 'zlexcount', 'zrange',
-                              'zrangebylex', 'zrangebyscore', 'zrank', 'zrem',
+    _allowed_redis_methods = ('bzpopmax', 'bzpopmin', 'zadd', 'zcard', 
+                              'zcount', 'zincrby', 'zinterstore', 'zlexcount',
+                              'zrange', 'zpopmax', 'zpopmin', 'zrangebylex',
+                              'zrangebyscore', 'zrank', 'zrem',
                               'zremrangebylex', 'zremrangebyrank',
                               'zremrangebyscore', 'zrevrange',
                               'zrevrangebylex', 'zrevrangebyscore', 'zrevrank',
                               'zscan', 'zscore', 'zunionstore')
     _single_object_answered_redis_methods = ()
-    _list_answered_redis_methods = ('zrange', 'zrangebylex', 'zrangebyscore',
+    _list_answered_redis_methods = ('zpopmax', 'zpopmin', 'zrange',
+                                    'zrangebylex', 'zrangebyscore',
                                     'zrevrange', 'zrevrangebylex',
                                     'zrevrangebyscore', 'zscan', )
 
